@@ -49,6 +49,7 @@ from hyperspy.decorators import auto_replot
 from hyperspy.defaults_parser import preferences
 from hyperspy.misc.io.tools import ensure_directory
 from hyperspy.misc.progressbar import progressbar
+from hyperspy.misc.slicing import SpecialSlicers, FancySlicing
 from hyperspy.gui.tools import (
     SpectrumCalibration,
     SmoothingSavitzkyGolay,
@@ -2484,7 +2485,20 @@ class MVATools(object):
         factors.plot(navigator=factors_navigator)
 
 
-class Signal(MVA,
+class SpecialSlicersSignal(SpecialSlicers):
+    def __setitem__(self, i, j):
+        """x.__setitem__(i, y) <==> x[i]=y
+        """
+        if isinstance(j, Signal):
+            j = j.data
+        self.obj._slicer(i, self.isNavigation).data[:] = j
+
+    def __len__(self):
+        return self.obj.axes_manager.signal_shape[0]
+
+
+class Signal(FancySlicing,
+             MVA,
              MVATools,
              Signal1DTools,
              Signal2DTools,):
@@ -2523,8 +2537,8 @@ class Signal(MVA,
         self._load_dictionary(kwds)
         self._plot = None
         self.auto_replot = True
-        self.inav = SpecialSlicers(self, True)
-        self.isig = SpecialSlicers(self, False)
+        self.inav = SpecialSlicersSignal(self, True)
+        self.isig = SpecialSlicersSignal(self, False)
 
     @property
     def mapped_parameters(self):
@@ -2598,75 +2612,7 @@ class Signal(MVA,
         return string.encode('utf8')
 
     def __getitem__(self, slices, isNavigation=None):
-        try:
-            len(slices)
-        except TypeError:
-            slices = (slices,)
-        _orig_slices = slices
-
-        has_nav = True if isNavigation is None else isNavigation
-        has_signal = True if isNavigation is None else not isNavigation
-
-        # Create a deepcopy of self that contains a view of self.data
-        _signal = self._deepcopy_with_new_data(self.data)
-
-        nav_idx = [el.index_in_array for el in
-                   _signal.axes_manager.navigation_axes]
-        signal_idx = [el.index_in_array for el in
-                      _signal.axes_manager.signal_axes]
-
-        if not has_signal:
-            idx = nav_idx
-        elif not has_nav:
-            idx = signal_idx
-        else:
-            idx = nav_idx + signal_idx
-
-        # Add support for Ellipsis
-        if Ellipsis in _orig_slices:
-            _orig_slices = list(_orig_slices)
-            # Expand the first Ellipsis
-            ellipsis_index = _orig_slices.index(Ellipsis)
-            _orig_slices.remove(Ellipsis)
-            _orig_slices = (_orig_slices[:ellipsis_index] +
-                            [slice(None), ] * max(0, len(idx) - len(_orig_slices)) +
-                            _orig_slices[ellipsis_index:])
-            # Replace all the following Ellipses by :
-            while Ellipsis in _orig_slices:
-                _orig_slices[_orig_slices.index(Ellipsis)] = slice(None)
-            _orig_slices = tuple(_orig_slices)
-
-        if len(_orig_slices) > len(idx):
-            raise IndexError("too many indices")
-
-        slices = np.array([slice(None,)] *
-                          len(_signal.axes_manager._axes))
-
-        slices[idx] = _orig_slices + (slice(None),) * max(
-            0, len(idx) - len(_orig_slices))
-
-        array_slices = []
-        for slice_, axis in zip(slices, _signal.axes_manager._axes):
-            if (isinstance(slice_, slice) or
-                    len(_signal.axes_manager._axes) < 2):
-                array_slices.append(axis._slice_me(slice_))
-            else:
-                if isinstance(slice_, float):
-                    slice_ = axis.value2index(slice_)
-                array_slices.append(slice_)
-                _signal._remove_axis(axis.index_in_axes_manager)
-
-        _signal.data = _signal.data[array_slices]
-        if self.metadata.has_item('Signal.Noise_properties.variance'):
-            if isinstance(
-                    self.metadata.Signal.Noise_properties.variance, Signal):
-                _signal.metadata.Signal.Noise_properties.variance = self.metadata.Signal.Noise_properties.variance.__getitem__(
-                    _orig_slices,
-                    isNavigation)
-        _signal.get_dimensions_from_data()
-
-        return _signal
-
+        return self._slicer(slices, isNavigation=None)
     def __setitem__(self, i, j):
         """x.__setitem__(i, y) <==> x[i]=y
 
@@ -4625,23 +4571,3 @@ for name in (
         ("   return self._unary_operator_ruler(\'%s\')" % name))
     exec("%s.__doc__ = int.%s.__doc__" % (name, name))
     exec("setattr(Signal, \'%s\', %s)" % (name, name))
-
-
-class SpecialSlicers:
-
-    def __init__(self, signal, isNavigation):
-        self.isNavigation = isNavigation
-        self.signal = signal
-
-    def __getitem__(self, slices):
-        return self.signal.__getitem__(slices, self.isNavigation)
-
-    def __setitem__(self, i, j):
-        """x.__setitem__(i, y) <==> x[i]=y
-        """
-        if isinstance(j, Signal):
-            j = j.data
-        self.signal.__getitem__(i, self.isNavigation).data[:] = j
-
-    def __len__(self):
-        return self.signal.axes_manager.signal_shape[0]
