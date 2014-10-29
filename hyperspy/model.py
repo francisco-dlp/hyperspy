@@ -2127,7 +2127,11 @@ class modelSpecialSlicers:
                 if k.startswith('_init_'):
                     args[k[6:]] = v
             _model.append(getattr(components, c._id_name)(**args))
-        deal_with_whitelist(self.model, _model, array_slices, self.isNavigation)
+        deal_with_whitelist(
+            self.model,
+            _model,
+            array_slices,
+            self.isNavigation)
         for co, cn in zip(self.model, _model):
             deal_with_whitelist(co, cn, array_slices, self.isNavigation)
             for po, pn in zip(co.parameters, cn.parameters):
