@@ -38,7 +38,6 @@ from traits.trait_errors import TraitError
 from hyperspy import components
 from hyperspy import messages
 import hyperspy.drawing.spectrum
-from hyperspy.axes import AxesManager
 from hyperspy.drawing.utils import on_figure_window_close
 from hyperspy.misc import progressbar
 from hyperspy._signals.eels import Spectrum
@@ -54,6 +53,7 @@ from hyperspy.gui.tools import ComponentFit
 from hyperspy.component import Component
 from hyperspy.signal import Signal
 from hyperspy.misc.export_dictionary import export_to_dictionary, load_from_dictionary
+from hyperspy.misc.slicing import deal_with_whitelist
 
 
 weights_deprecation_warning = (
@@ -2120,7 +2120,6 @@ class modelSpecialSlicers:
         from hyperspy import components
         for c in _model:
             _model.remove(c)
-        # create components:
         twin_dict = {}
         for c in self.model:
             args = {}
@@ -2128,62 +2127,25 @@ class modelSpecialSlicers:
                 if k.startswith('_init_'):
                     args[k[6:]] = v
             _model.append(getattr(components, c._id_name)(**args))
-        if self.isNavigation:
-            _model.dof.data = np.atleast_1d(
-                self.model.dof.data[
-                    tuple(
-                        array_slices[
-                            :-
-                            1])])
-            _model.chisq.data = np.atleast_1d(
-                self.model.chisq.data[
-                    tuple(
-                        array_slices[
-                            :-
-                            1])])
-            for ic, c in enumerate(_model):
-                c.name = self.model[ic].name
-                for p_new, p_orig in zip(c.parameters, self.model[ic].parameters):
-                    p_new.free = p_orig.free
-                    p_new.std = p_orig.std
-                    p_new.ext_bounded = p_orig.ext_bounded
-                    p_new.ext_force_positive = p_orig.ext_force_positive
-                    p_new.twin_function = p_orig.twin_function
-                    p_new.twin_inverse_function = p_orig.twin_inverse_function
-                    p_new.map = np.atleast_1d(
-                        p_orig.map[
-                            tuple(
-                                array_slices[
-                                    :-
-                                    1])])
-                    p_new.value = p_orig.value
-                    twin_dict[id(p_orig)] = ([id(i)
-                                              for i in list(p_orig._twins)], p_new)
-                    # if hasattr(c, '_important'):
-                    #    for i in c._important:
-                    #        if i['signal_like']:
-                    #            tmp  = getattr(_model[ic], i['name']).__getitem__(_orig_slices, isNavigation)
-                    #            getattr(c, i['name']) = tmp
-                    #        else:
-                    # getattr(c, i['name']) = getattr(_model[ic], i['name'])
-        else:
-            for ic, c in enumerate(_model):
-                c.name = self.model[ic].name
-                for p_new, p_orig in zip(c.parameters, self.model[ic].parameters):
-                    p_new.free = p_orig.free
-                    p_new.std = p_orig.std
-                    p_new.ext_bounded = p_orig.ext_bounded
-                    p_new.ext_force_positive = p_orig.ext_force_positive
-                    p_new.twin_function = p_orig.twin_function
-                    p_new.twin_inverse_function = p_orig.twin_inverse_function
-                    p_new.map = p_orig.map
-                    p_new.value = p_new.map['values'].ravel()[0]
-                    twin_dict[id(p_orig)] = ([id(i)
-                                              for i in list(p_orig._twins)], p_new)
-            _model.dof.data = self.model.dof.data
-            for index in _model.axes_manager:
-                _model._calculate_chisq()
+        deal_with_whitelist(self.model, _model, array_slices, self.isNavigation)
+        for co, cn in zip(self.model, _model):
+            deal_with_whitelist(co, cn, array_slices, self.isNavigation)
+            for po, pn in zip(co.parameters, cn.parameters):
+                deal_with_whitelist(po, pn, array_slices, self.isNavigation)
+                twin_dict[id(po)] = ([id(i) for i in list(po._twins)], pn)
+
         for k in twin_dict.keys():
             for tw_id in twin_dict[k][0]:
                 twin_dict[tw_id][1].twin = twin_dict[k][1]
+
+        _model.chisq.data = _model.chisq.data.copy()
+        _model.dof.data = _model.dof.data.copy()
+        if not self.isNavigation:
+            # strange bug, skips the first pixel when iterating for the first time -
+            # maybe the axes_manager is not initialised correctly?
+            for _ in _model.axes_manager:
+                pass
+            for _ in _model.axes_manager:
+                _model._calculate_chisq()
+
         return _model

@@ -3,6 +3,26 @@ from operator import attrgetter
 import numpy as np
 
 
+def deal_with_arrays(arr, arr_slices=None, nav=True):
+    if nav:
+        return np.atleast_1d(arr[tuple(arr_slices[:-1])])
+    else:
+        return arr
+
+
+def deal_with_whitelist(_from, _to, array_slices, isNav):
+    for key in _from._whitelist.keys():
+        if key.startswith('_init_') or key == '_id_':
+            pass
+        elif key.startswith('_fn_'):
+            attrsetter(_to, key[4:], attrgetter(key[4:])(_from))
+        else:
+            if isinstance(attrgetter(key)(_from), np.ndarray):
+                attrsetter(_to, key, deal_with_arrays(attrgetter(key)(_from), array_slices, isNav))
+            else:
+                attrsetter(_to, key, attrgetter(key)(_from))
+
+
 def attrsetter(target, attrs, value):
     """ Like operator.attrgetter, but for setattr - supports "nested" attributes.
 
