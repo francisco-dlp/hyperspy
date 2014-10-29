@@ -1,5 +1,21 @@
 import numpy as np
+from operator import attrgetter
 
+
+def attrsetter(target, attrs, value):
+    """ Like operator.attrgetter, but for setattr - supports "nested" attributes.
+
+        Parameters
+        ----------
+            target : object
+            attrs : string
+            value : object
+
+    """
+    where = attrs.rfind('.')
+    if where != -1:
+        target = attrgetter(attrs[:where])(target)
+    setattr(target, attrs[where + 1:], value)
 
 class SpecialSlicers:
     def __init__(self, obj, isNavigation):
@@ -71,12 +87,14 @@ class FancySlicing(object):
                 _obj._remove_axis(axis.index_in_axes_manager)
 
         _obj.data = _obj.data[array_slices]
-        # if self.metadata.has_item('Signal.Noise_properties.variance'):
-        #     if isinstance(
-        #             self.metadata.Signal.Noise_properties.variance, Signal):
-        #         _obj.metadata.Signal.Noise_properties.variance = \
-        #             self.metadata.Signal.Noise_properties.variance.__getitem__(
-        #                 _orig_slices, isNavigation)
+        if hasattr(self, "_additional_slicing_targets"):
+            for ta in self._additional_slicing_targets:
+                try:
+                    t = attrgetter(ta)(self)
+                    if hasattr(t, '_slicer'):
+                        attrsetter(_obj, ta, t._slicer(_orig_slices, isNavigation))
+                except AttributeError:
+                    pass
         _obj.get_dimensions_from_data()
 
         return _obj

@@ -2506,6 +2506,7 @@ class Signal(FancySlicing,
     _record_by = ""
     _signal_type = ""
     _signal_origin = ""
+    _additional_slicing_targets = ["metadata.Signal.Noise_properties.variance", ]
 
     def __init__(self, data, **kwds):
         """Create a Signal from a numpy array.
