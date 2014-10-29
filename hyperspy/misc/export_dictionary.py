@@ -1,0 +1,107 @@
+# -*- coding: utf-8 -*-
+# Copyright 2007-2014 The HyperSpy developers
+#
+# This file is part of  HyperSpy.
+#
+#  HyperSpy is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+#  HyperSpy is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with  HyperSpy.  If not, see <http://www.gnu.org/licenses/>.
+
+from operator import attrgetter
+from hyperspy.misc.slicing import attrsetter
+try:
+    import dill
+    dill_avail = True
+except ImportError:
+    dill_avail = False
+    import types
+    import marshal
+
+
+def export_to_dictionary(target, whitelist, dic):
+    """ Exports attributes of target from whitelist.keys() to dictionary dic
+        All values are references only
+
+        Parameters
+        ----------
+            target : object
+                must contain the (nested) attributes of the whitelist.keys()
+            whitelist : dictionary
+                A dictionary, keys of which are used as attributes for exporting.
+                For easier loading afterwards, highly advisable to contain key '_whitelist'.
+                The convention is as follows:
+                * key starts with '_init_' (e.g. key = '_init_volume'):
+                    object of the whitelist[key] is saved, used for initialization of the target
+                * key starts with '_fn_' (e.g. key = '_fn_twin_function'):
+                    the targeted attribute is a function, and is pickled (preferably with dill package).
+                    A tuple of (Bool, value) is exported, where Bool is whether dill package is available,
+                    and value is pickled function.
+                * key is '_id_' (e.g. key = '_id_'):
+                    the id of the target is exported (e.g. id(target) )
+            dic : dictionary
+                A dictionary where the object will be exported
+    """
+    for key, value in whitelist.iteritems():
+        if key.startswith('_init_'):
+            dic[key] = value
+        elif key.startswith('_fn_'):
+            if dill_avail:
+                dic[key] = (True, dill.dumps(attrgetter(key[4:])(target)))
+            else:
+                dic[key] = (
+                    False, marshal.dumps(attrgetter(key[4:])(target).func_code))
+        elif key == '_id_':
+            dic[key] = id(target)
+        else:
+            dic[key] = attrgetter(key)(target)
+
+
+def load_from_dictionary(target, dic):
+    """ Loads attributes of target to dictionary dic
+        The attribute list is read from dic['_whitelist'].keys()
+        All values are references only
+
+        Parameters
+        ----------
+            target : object
+                must contain the (nested) attributes of the whitelist.keys()
+            dic : dictionary
+                A dictionary, containing field '_whitelist', which is a dictionary with all keys that were exported
+                The convention is as follows:
+                * key starts with '_init_' (e.g. key = '_init_volume'):
+                    object had to be used for initialization of the target
+                * key starts with '_fn_' (e.g. key = '_fn_twin_function'):
+                    the value is a tuple of (Bool, picked_function), the targeted attribute is assigned
+                    unpickled (preferably with dill package) function.
+                    Bool is whether dill package was used pickling.
+                * key is '_id_' (e.g. key = '_id_'):
+                    skipped.
+    """
+    for key in dic['_whitelist'].keys():
+        value = dic[key]
+        if key.startswith('_fn_'):
+            if value[0] and not dill_avail:
+                raise ValueError(
+                    "the dictionary was constructed using \"dill\" package, which is not available on the system")
+            elif dill_avail:
+                attrsetter(target, key[4:], dill.loads(value[1]))
+
+            else:
+                attrsetter(
+                    target, key[
+                        4:], types.FunctionType(
+                        marshal.loads(
+                            value[1]), globals()))
+        elif key.startswith('_init_') or key.startswith('_id_'):
+            pass
+        else:
+            attrsetter(target, key, value)
