@@ -2107,7 +2107,9 @@ class modelSpecialSlicers:
         self.model = model
 
     def __getitem__(self, slices):
-        array_slices = self.model.spectrum._get_array_slices(slices, self.isNavigation)
+        array_slices = self.model.spectrum._get_array_slices(
+            slices,
+            self.isNavigation)
         _spectrum = self.model.spectrum._slicer(slices, self.isNavigation)
         _model = self.model.__class__(_spectrum)
         from hyperspy import components
@@ -2126,14 +2128,14 @@ class modelSpecialSlicers:
                 self.model.dof.data[
                     tuple(
                         array_slices[
-                        :-
-                        1])])
+                            :-
+                            1])])
             _model.chisq.data = np.atleast_1d(
                 self.model.chisq.data[
                     tuple(
                         array_slices[
-                        :-
-                        1])])
+                            :-
+                            1])])
             for ic, c in enumerate(_model):
                 c.name = self.model[ic].name
                 for p_new, p_orig in zip(c.parameters, self.model[ic].parameters):
@@ -2147,8 +2149,8 @@ class modelSpecialSlicers:
                         p_orig.map[
                             tuple(
                                 array_slices[
-                                :-
-                                1])])
+                                    :-
+                                    1])])
                     p_new.value = p_orig.value
                     twin_dict[id(p_orig)] = ([id(i)
                                               for i in list(p_orig._twins)], p_new)
@@ -2180,4 +2182,3 @@ class modelSpecialSlicers:
             for tw_id in twin_dict[k][0]:
                 twin_dict[tw_id][1].twin = twin_dict[k][1]
         return _model
-
