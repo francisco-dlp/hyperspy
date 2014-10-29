@@ -2075,7 +2075,7 @@ class Model(list):
                 else:
                     _component._active_array.fill(value)
 
-    def __getitem__(self, value, not_components=False, isNavigation=None):
+    def __getitem__(self, value, not_components=False):
         """x.__getitem__(y) <==> x[y]"""
         if isinstance(value, str):
             component_list = []
@@ -2096,148 +2096,8 @@ class Model(list):
                 raise ValueError(
                     "Component name \"" + str(value) +
                     "\" not found in model")
-        elif not not_components:
-            return list.__getitem__(self, value)
         else:
-            if isNavigation is None:
-                raise ValueError('has to be either navigation or signal slice')
-            slices = value
-            try:
-                len(slices)
-            except TypeError:
-                slices = (slices,)
-
-            if not isNavigation:
-                slices_new = ()
-                for s in slices:
-                    if not isinstance(s, slice):
-                        slices_new += (slice(s, s + 1, None),)
-                    else:
-                        slices_new += (s,)
-                slices = slices_new
-
-            _orig_slices = slices
-
-            # Create a deepcopy of self.spectrum that contains a view of
-            # self.spectrum.data
-            _spectrum = self.spectrum._deepcopy_with_new_data(
-                self.spectrum.data)
-
-            if isNavigation:
-                idx = [el.index_in_array for el in
-                       _spectrum.axes_manager.navigation_axes]
-            else:
-                idx = [el.index_in_array for el in
-                       _spectrum.axes_manager.signal_axes]
-
-            # Add support for Ellipsis
-            if Ellipsis in _orig_slices:
-                _orig_slices = list(_orig_slices)
-                # Expand the first Ellipsis
-                ellipsis_index = _orig_slices.index(Ellipsis)
-                _orig_slices.remove(Ellipsis)
-                _orig_slices = (_orig_slices[:ellipsis_index] +
-                                [slice(None), ] * max(0, len(idx) - len(_orig_slices)) +
-                                _orig_slices[ellipsis_index:])
-                # Replace all the following Ellipses by :
-                while Ellipsis in _orig_slices:
-                    _orig_slices[_orig_slices.index(Ellipsis)] = slice(None)
-                _orig_slices = tuple(_orig_slices)
-            if len(_orig_slices) > len(idx):
-                raise IndexError("too many indices")
-
-            slices = np.array([slice(None,)] *
-                              len(_spectrum.axes_manager._axes))
-
-            slices[idx] = _orig_slices + (slice(None),) * max(
-                0, len(idx) - len(_orig_slices))
-
-            array_slices = []
-            for slice_, axis in zip(slices, _spectrum.axes_manager._axes):
-                if (isinstance(slice_, slice) or
-                        len(_spectrum.axes_manager._axes) < 2):
-                    array_slices.append(axis._slice_me(slice_))
-                else:
-                    if isinstance(slice_, float):
-                        slice_ = axis.value2index(slice_)
-                    array_slices.append(slice_)
-                    _spectrum._remove_axis(axis.index_in_axes_manager)
-
-            _spectrum.data = _spectrum.data[array_slices]
-            if self.spectrum.metadata.has_item('Signal.Noise_properties.variance'):
-                if isinstance(self.spectrum.metadata.Signal.Noise_properties.variance, Signal):
-                    _spectrum.metadata.Signal.Noise_properties.variance = self.spectrum.metadata.Signal.Noise_properties.variance.__getitem__(
-                        _orig_slices,
-                        isNavigation)
-            _spectrum.get_dimensions_from_data()
-            from hyperspy.model import Model
-            from hyperspy import components
-            _model = self.__class__(_spectrum)
-            for c in _model:
-                _model.remove(c)
-            # create components:
-            twin_dict = {}
-            for c in self:
-                _model.append(getattr(components, c._id_name)())
-            if isNavigation:
-                _model.dof.data = np.atleast_1d(
-                    self.dof.data[
-                        tuple(
-                            array_slices[
-                                :-
-                                1])])
-                _model.chisq.data = np.atleast_1d(
-                    self.chisq.data[
-                        tuple(
-                            array_slices[
-                                :-
-                                1])])
-                for ic, c in enumerate(_model):
-                    c.name = self[ic].name
-                    for p_new, p_orig in zip(c.parameters, self[ic].parameters):
-                        p_new.free = p_orig.free
-                        p_new.std = p_orig.std
-                        p_new.ext_bounded = p_orig.ext_bounded
-                        p_new.ext_force_positive = p_orig.ext_force_positive
-                        p_new.twin_function = p_orig.twin_function
-                        p_new.twin_inverse_function = p_orig.twin_inverse_function
-                        p_new.map = np.atleast_1d(
-                            p_orig.map[
-                                tuple(
-                                    array_slices[
-                                        :-
-                                        1])])
-                        p_new.value = p_orig.value
-                        twin_dict[id(p_orig)] = ([id(i)
-                                                  for i in list(p_orig._twins)], p_new)
-                    # if hasattr(c, '_important'):
-                    #    for i in c._important:
-                    #        if i['signal_like']:
-                    #            tmp  = getattr(_model[ic], i['name']).__getitem__(_orig_slices, isNavigation)
-                    #            getattr(c, i['name']) = tmp
-                    #        else:
-                    # getattr(c, i['name']) = getattr(_model[ic], i['name'])
-            else:
-                for ic, c in enumerate(_model):
-                    c.name = self[ic].name
-                    for p_new, p_orig in zip(c.parameters, self[ic].parameters):
-                        p_new.free = p_orig.free
-                        p_new.std = p_orig.std
-                        p_new.ext_bounded = p_orig.ext_bounded
-                        p_new.ext_force_positive = p_orig.ext_force_positive
-                        p_new.twin_function = p_orig.twin_function
-                        p_new.twin_inverse_function = p_orig.twin_inverse_function
-                        p_new.map = p_orig.map
-                        p_new.value = p_new.map['values'].ravel()[0]
-                        twin_dict[id(p_orig)] = ([id(i)
-                                                  for i in list(p_orig._twins)], p_new)
-                _model.dof.data = self.dof.data
-                for index in _model.axes_manager:
-                    _model._calculate_chisq()
-            for k in twin_dict.keys():
-                for tw_id in twin_dict[k][0]:
-                    twin_dict[tw_id][1].twin = twin_dict[k][1]
-            return _model
+            return list.__getitem__(self, value)
 
 
 class modelSpecialSlicers:
@@ -2247,4 +2107,77 @@ class modelSpecialSlicers:
         self.model = model
 
     def __getitem__(self, slices):
-        return self.model.__getitem__(slices, True, self.isNavigation)
+        array_slices = self.model.spectrum._get_array_slices(slices, self.isNavigation)
+        _spectrum = self.model.spectrum._slicer(slices, self.isNavigation)
+        _model = self.model.__class__(_spectrum)
+        from hyperspy import components
+        for c in _model:
+            _model.remove(c)
+        # create components:
+        twin_dict = {}
+        for c in self.model:
+            args = {}
+            for k, v in c._whitelist.iteritems():
+                if k.startswith('_init_'):
+                    args[k[6:]] = v
+            _model.append(getattr(components, c._id_name)(**args))
+        if self.isNavigation:
+            _model.dof.data = np.atleast_1d(
+                self.model.dof.data[
+                    tuple(
+                        array_slices[
+                        :-
+                        1])])
+            _model.chisq.data = np.atleast_1d(
+                self.model.chisq.data[
+                    tuple(
+                        array_slices[
+                        :-
+                        1])])
+            for ic, c in enumerate(_model):
+                c.name = self.model[ic].name
+                for p_new, p_orig in zip(c.parameters, self.model[ic].parameters):
+                    p_new.free = p_orig.free
+                    p_new.std = p_orig.std
+                    p_new.ext_bounded = p_orig.ext_bounded
+                    p_new.ext_force_positive = p_orig.ext_force_positive
+                    p_new.twin_function = p_orig.twin_function
+                    p_new.twin_inverse_function = p_orig.twin_inverse_function
+                    p_new.map = np.atleast_1d(
+                        p_orig.map[
+                            tuple(
+                                array_slices[
+                                :-
+                                1])])
+                    p_new.value = p_orig.value
+                    twin_dict[id(p_orig)] = ([id(i)
+                                              for i in list(p_orig._twins)], p_new)
+                    # if hasattr(c, '_important'):
+                    #    for i in c._important:
+                    #        if i['signal_like']:
+                    #            tmp  = getattr(_model[ic], i['name']).__getitem__(_orig_slices, isNavigation)
+                    #            getattr(c, i['name']) = tmp
+                    #        else:
+                    # getattr(c, i['name']) = getattr(_model[ic], i['name'])
+        else:
+            for ic, c in enumerate(_model):
+                c.name = self.model[ic].name
+                for p_new, p_orig in zip(c.parameters, self.model[ic].parameters):
+                    p_new.free = p_orig.free
+                    p_new.std = p_orig.std
+                    p_new.ext_bounded = p_orig.ext_bounded
+                    p_new.ext_force_positive = p_orig.ext_force_positive
+                    p_new.twin_function = p_orig.twin_function
+                    p_new.twin_inverse_function = p_orig.twin_inverse_function
+                    p_new.map = p_orig.map
+                    p_new.value = p_new.map['values'].ravel()[0]
+                    twin_dict[id(p_orig)] = ([id(i)
+                                              for i in list(p_orig._twins)], p_new)
+            _model.dof.data = self.model.dof.data
+            for index in _model.axes_manager:
+                _model._calculate_chisq()
+        for k in twin_dict.keys():
+            for tw_id in twin_dict[k][0]:
+                twin_dict[tw_id][1].twin = twin_dict[k][1]
+        return _model
+
