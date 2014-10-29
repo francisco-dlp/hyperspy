@@ -17,7 +17,9 @@ def attrsetter(target, attrs, value):
         target = attrgetter(attrs[:where])(target)
     setattr(target, attrs[where + 1:], value)
 
+
 class SpecialSlicers:
+
     def __init__(self, obj, isNavigation):
         self.isNavigation = isNavigation
         self.obj = obj
@@ -27,6 +29,7 @@ class SpecialSlicers:
 
 
 class FancySlicing(object):
+
     def _slicer(self, slices, isNavigation=None):
         try:
             len(slices)
@@ -92,7 +95,12 @@ class FancySlicing(object):
                 try:
                     t = attrgetter(ta)(self)
                     if hasattr(t, '_slicer'):
-                        attrsetter(_obj, ta, t._slicer(_orig_slices, isNavigation))
+                        attrsetter(
+                            _obj,
+                            ta,
+                            t._slicer(
+                                _orig_slices,
+                                isNavigation))
                 except AttributeError:
                     pass
         _obj.get_dimensions_from_data()

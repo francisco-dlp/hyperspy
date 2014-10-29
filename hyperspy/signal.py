@@ -2486,6 +2486,7 @@ class MVATools(object):
 
 
 class SpecialSlicersSignal(SpecialSlicers):
+
     def __setitem__(self, i, j):
         """x.__setitem__(i, y) <==> x[i]=y
         """
@@ -2506,7 +2507,9 @@ class Signal(FancySlicing,
     _record_by = ""
     _signal_type = ""
     _signal_origin = ""
-    _additional_slicing_targets = ["metadata.Signal.Noise_properties.variance", ]
+    _additional_slicing_targets = [
+        "metadata.Signal.Noise_properties.variance",
+    ]
 
     def __init__(self, data, **kwds):
         """Create a Signal from a numpy array.
@@ -2614,6 +2617,7 @@ class Signal(FancySlicing,
 
     def __getitem__(self, slices, isNavigation=None):
         return self._slicer(slices, isNavigation=None)
+
     def __setitem__(self, i, j):
         """x.__setitem__(i, y) <==> x[i]=y
 
