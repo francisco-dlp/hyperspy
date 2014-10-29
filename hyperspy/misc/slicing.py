@@ -81,7 +81,7 @@ class FancySlicing(object):
         array_slices = []
         for slice_, axis in zip(slices, self.axes_manager._axes):
             if (isinstance(slice_, slice) or
-                        len(self.axes_manager._axes) < 2):
+                    len(self.axes_manager._axes) < 2):
                 array_slices.append(axis._get_array_slices(slice_))
             else:
                 if isinstance(slice_, float):
@@ -94,7 +94,7 @@ class FancySlicing(object):
         _obj = self._deepcopy_with_new_data(self.data[array_slices])
         for slice_, axis in zip(array_slices, _obj.axes_manager._axes):
             if (isinstance(slice_, slice) or
-                        len(self.axes_manager._axes) < 2):
+                    len(self.axes_manager._axes) < 2):
                 _ = axis._slice_me(slice_)
             else:
                 _obj._remove_axis(axis.index_in_axes_manager)
