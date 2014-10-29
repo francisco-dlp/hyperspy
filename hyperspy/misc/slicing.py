@@ -1,5 +1,6 @@
-import numpy as np
 from operator import attrgetter
+
+import numpy as np
 
 
 def attrsetter(target, attrs, value):
@@ -30,7 +31,7 @@ class SpecialSlicers:
 
 class FancySlicing(object):
 
-    def _slicer(self, slices, isNavigation=None):
+    def _get_array_slices(self, slices, isNavigation=None):
         try:
             len(slices)
         except TypeError:
@@ -41,12 +42,11 @@ class FancySlicing(object):
         has_signal = True if isNavigation is None else not isNavigation
 
         # Create a deepcopy of self that contains a view of self.data
-        _obj = self._deepcopy_with_new_data(self.data)
 
         nav_idx = [el.index_in_array for el in
-                   _obj.axes_manager.navigation_axes]
+                   self.axes_manager.navigation_axes]
         signal_idx = [el.index_in_array for el in
-                      _obj.axes_manager.signal_axes]
+                      self.axes_manager.signal_axes]
 
         if not has_signal:
             idx = nav_idx
@@ -73,23 +73,31 @@ class FancySlicing(object):
             raise IndexError("too many indices")
 
         slices = np.array([slice(None,)] *
-                          len(_obj.axes_manager._axes))
+                          len(self.axes_manager._axes))
 
         slices[idx] = _orig_slices + (slice(None),) * max(
             0, len(idx) - len(_orig_slices))
 
         array_slices = []
-        for slice_, axis in zip(slices, _obj.axes_manager._axes):
+        for slice_, axis in zip(slices, self.axes_manager._axes):
             if (isinstance(slice_, slice) or
-                    len(_obj.axes_manager._axes) < 2):
-                array_slices.append(axis._slice_me(slice_))
+                        len(self.axes_manager._axes) < 2):
+                array_slices.append(axis._get_array_slices(slice_))
             else:
                 if isinstance(slice_, float):
                     slice_ = axis.value2index(slice_)
                 array_slices.append(slice_)
-                _obj._remove_axis(axis.index_in_axes_manager)
+        return array_slices
 
-        _obj.data = _obj.data[array_slices]
+    def _slicer(self, slices, isNavigation=None):
+        array_slices = self._get_array_slices(slices, isNavigation)
+        _obj = self._deepcopy_with_new_data(self.data[array_slices])
+        for slice_, axis in zip(array_slices, _obj.axes_manager._axes):
+            if (isinstance(slice_, slice) or
+                        len(self.axes_manager._axes) < 2):
+                _ = axis._slice_me(slice_)
+            else:
+                _obj._remove_axis(axis.index_in_axes_manager)
         if hasattr(self, "_additional_slicing_targets"):
             for ta in self._additional_slicing_targets:
                 try:
@@ -99,7 +107,7 @@ class FancySlicing(object):
                             _obj,
                             ta,
                             t._slicer(
-                                _orig_slices,
+                                slices,
                                 isNavigation))
                 except AttributeError:
                     pass
