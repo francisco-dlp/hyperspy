@@ -21,8 +21,9 @@ import os
 import tempfile
 import warnings
 import numbers
+import math
+
 import numpy as np
-import numpy.linalg
 import scipy.odr as odr
 from scipy.optimize import (leastsq,
                             fmin,
@@ -999,6 +1000,15 @@ class Model(list):
             ' reduced chi-squared'
         return tmp
 
+    def _std_correlation_correction(self, std):
+        if ("Signal.Noise_properties."
+            "Variance_linear_model.correlation_factor" in
+                self.spectrum.metadata):
+            cf = self.spectrum.metadata.Signal.Noise_properties.\
+                Variance_linear_model.correlation_factor
+            std /= math.sqrt(cf)
+        return std
+
     def fit(self, fitter=None, method='ls', grad=False,
             bounded=False, ext_bounding=False, update_plot=False,
             **kwargs):
@@ -1141,6 +1151,7 @@ class Model(list):
                 pcov *= ((self._errfunc(self.p0, *args) ** 2).sum() /
                          (len(args[0]) - len(self.p0)))
                 self.p_std = np.sqrt(np.diag(pcov))
+                self.p_std = self._std_correlation_correction(self.p_std)
             self.fit_output = output
 
         elif fitter == "odr":
@@ -1149,11 +1160,13 @@ class Model(list):
             mydata = odr.RealData(self.axis.axis[self.channel_switches],
                                   self.spectrum()[self.channel_switches],
                                   sx=None,
-                                  sy=(1 / weights if weights is not None else None))
+                                  sy=(1 / weights if weights is not None
+                                      else None))
             myodr = odr.ODR(mydata, modelo, beta0=self.p0[:])
             myoutput = myodr.run()
             result = myoutput.beta
             self.p_std = myoutput.sd_beta
+            self.p_std = self._std_correlation_correction(self.p_std)
             self.p0 = result
             self.fit_output = myoutput
 
@@ -1175,6 +1188,7 @@ class Model(list):
                 self.p_std = m.perror * np.sqrt(
                     (self._errfunc(self.p0, *args) ** 2).sum() /
                     (len(args[0]) - len(self.p0)))
+            self.p_std = self._std_correlation_correction(self.p_std)
             self.fit_output = m
         else:
             # General optimizers (incluiding constrained ones(tnc,l_bfgs_b)
