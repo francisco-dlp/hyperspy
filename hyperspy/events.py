@@ -10,9 +10,13 @@ class EventSuppressionContext(object):
     def __init__(self, events):
         self.events = events
         self.old = {}
+        self._in = False
         
     def __enter__(self):
         self.old = {}
+        if self._in:
+            return
+        self._in = True
         try:
             for e in self.events.__dict__.itervalues():
                 self.old[e] = e.suppress
@@ -23,8 +27,10 @@ class EventSuppressionContext(object):
         return self
         
     def __exit__(self, type, value, tb):
-        for e, oldval in self.old.iteritems():
-            e.suppress = oldval
+        if self._in:    # Make sure we don't restore twice
+            self._in = False
+            for e, oldval in self.old.iteritems():
+                e.suppress = oldval
         # Never suppress events
 
 class Events(object):
