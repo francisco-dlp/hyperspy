@@ -3602,11 +3602,21 @@ class Signal(MVA,
         if out is not None:
             oldshape = out.data.shape
         if axis not in ("navigation", "signal"):
-            s = self._deepcopy_with_new_data(
-                function(self.data,
-                         axis=self.axes_manager[axis].index_in_array))
-            s._remove_axis(axis)
-            return s
+
+            if out is None:
+                s = self._deepcopy_with_new_data(None)
+            else:
+                s = out
+            s.data = function(self.data,
+                            axis=self.axes_manager[axis].index_in_array)
+            if out is None:
+                s._remove_axis(axis)
+                return s
+            else:
+                if oldshape != out.data.shape:
+                    out.get_dimensions_from_data()
+                out.events.data_changed.trigger()
+                return
 
         if axis == "navigation":
             s = self.get_current_signal(auto_filename=False, auto_title=False)
