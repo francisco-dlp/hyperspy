@@ -3597,13 +3597,26 @@ class Signal(MVA,
             self.metadata.Signal.record_by = self._record_by
             self._assign_subclass()
 
-    def _apply_function_on_data_and_remove_axis(self, function, axis):
+    def _apply_function_on_data_and_remove_axis(self, function, axis,
+                                                out=None):
+        if out is not None:
+            oldshape = out.data.shape
         if axis not in ("navigation", "signal"):
-            s = self._deepcopy_with_new_data(
-                function(self.data,
-                         axis=self.axes_manager[axis].index_in_array))
-            s._remove_axis(axis)
-            return s
+
+            if out is None:
+                s = self._deepcopy_with_new_data(None)
+            else:
+                s = out
+            s.data = function(self.data,
+                            axis=self.axes_manager[axis].index_in_array)
+            if out is None:
+                s._remove_axis(axis)
+                return s
+            else:
+                if oldshape != out.data.shape:
+                    out.get_dimensions_from_data()
+                out.events.data_changed.trigger()
+                return
 
         if axis == "navigation":
             s = self.get_current_signal(auto_filename=False, auto_title=False)
@@ -3620,7 +3633,12 @@ class Signal(MVA,
             data = function(data,
                             axis=iaxes.pop())
         s.data[:] = data
-        return s
+        if out is None:
+            return s
+        else:
+            if oldshape != out.data.shape:
+                out.get_dimensions_from_data()
+            out.events.data_changed.trigger()
 
     def sum(self, axis="navigation"):
         """Sum the data over the given axis.
