@@ -14,6 +14,8 @@ class EventSuppressionContext(object):
         
     def __enter__(self):
         self.old = {}
+        if self._in:
+            return
         self._in = True
         try:
             for e in self.events.__dict__.itervalues():
