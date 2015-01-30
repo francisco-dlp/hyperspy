@@ -425,25 +425,29 @@ def plot_images(images,
         raise ValueError("images must be a list of image signals."
                          " " + repr(type(images)) + " was given.")
 
+
+    n = 0
     for i, sig in enumerate(images):
         if sig.axes_manager.signal_dimension != 2:
             raise ValueError("This method only plots signals that are images. "
                              "The signal dimension must be equal to 2. "
                              "The signal at position " + repr(i) + " was " + repr(sig) + ".")
+        n += (sig.axes_manager.navigation_size
+              if sig.axes_manager.navigation_size > 0
+              else 1)
 
     # Determine labeling:
     if label_list is None:
-        label_list = [signal_label + " " + repr(num) for num in range(len(images))]
-    elif len(label_list) is not len(images):
+        label_list = [signal_label + " " + repr(num) for num in range(n)]
+    elif len(label_list) != n:
         raise ValueError("Length of label_list must be the same as the number of images to be plotted.\n"
                          "Length of label_list was: " + repr(len(label_list)) + ";\n"
-                         "Number of images was: " + repr(len(images)) + ".")
+                         "Number of images was: %i." % n)
 
     # Determine appropriate number of images per row
-    n = len(images)
     rows = int(np.ceil(n / float(per_row)))
     if n < per_row:
-            per_row = n
+        per_row = n
 
     # Set overall figure size and define figure (if not pre-existing)
     if fig is None:
@@ -456,7 +460,7 @@ def plot_images(images,
     axes_list = []
 
     # Initialize list of rgb tags
-    isrgb = [False]*len(images)
+    isrgb = [False] * len(images)
 
     # Check to see if there are any rgb images in list
     # if so, disable the global colorbar
@@ -473,54 +477,50 @@ def plot_images(images,
                             min([images[i].data.min() for i in range(len(images))])
 
     # Loop through each image, adding subplot for each one
-    for i in xrange(n):
-        ax = f.add_subplot(rows, per_row, i + 1)
-        axes_list.append(ax)
-        data = images[i].data
-
-        # Enable RGB plotting
-        if rgb_tools.is_rgbx(data):
-            # plot_colorbar = False
-            single_colorbar = False
-            data = rgb_tools.rgbx2regular_array(data, plot_friendly=True)
-            isrgb[i] = True
-        else:
-            data = images[i].data.flatten()
-
-        # Remove NaNs (if requested)
-        if no_nans:
-            data = np.nan_to_num(data)
-
+    idx = 0
+    for i, ims in enumerate(images):
         # Get handles for the signal axes and axes_manager
         axes_manager = images[i].axes_manager
         axes = axes_manager.signal_axes
+        for j, im in enumerate(ims):
+            idx += 1
+            ax = f.add_subplot(rows, per_row, idx)
+            axes_list.append(ax)
+            data = im.data
 
-        if axes_manager.signal_dimension == 2:
-            # get calibration from a passed axes_manager
-            shape = axes_manager._signal_shape_in_array
+            # Enable RGB plotting
+            if rgb_tools.is_rgbx(data):
+                # plot_colorbar = False
+                single_colorbar = False
+                data = rgb_tools.rgbx2regular_array(data, plot_friendly=True)
+                isrgb[i] = True
+            else:
+                data = im.data
 
-            # Reshape the data for input into imshow (if not rgb)
-            if not isrgb[i]:
-                data = data.reshape(shape)
+            # Remove NaNs (if requested)
+            if no_nans:
+                data = np.nan_to_num(data)
 
             # Set dimensions of images
-            extent = (axes[0].low_value,
-                      axes[0].high_value,
-                      axes[1].high_value,
-                      axes[1].low_value)
+            extent = (
+                axes[0].low_value,
+                axes[0].high_value,
+                axes[1].high_value,
+                axes[1].low_value,
+            )
 
             # Plot image data, using vmin and vmax to set bounds, or allowing them
             # to be set automatically if using individual colorbars
             if single_colorbar:
                 im = ax.imshow(data,
-                               cmap=cmap, extent=extent,
-                               interpolation=interp,
-                               vmin=gl_min, vmax=gl_max, *args, **kwargs)
+                            cmap=cmap, extent=extent,
+                            interpolation=interp,
+                            vmin=gl_min, vmax=gl_max, *args, **kwargs)
             else:
                 im = ax.imshow(data,
-                               cmap=cmap, extent=extent,
-                               interpolation=interp,
-                               *args, **kwargs)
+                            cmap=cmap, extent=extent,
+                            interpolation=interp,
+                            *args, **kwargs)
 
             # Label the axes
             if type(axes[0].units) is trait_base._Undefined:
@@ -531,7 +531,10 @@ def plot_images(images,
             plt.ylabel(axes[1].units)
 
             if labels_on:
-                plt.title(label_list[i])
+                title = label_list[i]
+                if ims.axes_manager.navigation_size > 1:
+                    title += " / %s" % str(ims.axes_manager.indices)
+                plt.title(title)
 
             if not axes_on:
                 plt.axis('off')
