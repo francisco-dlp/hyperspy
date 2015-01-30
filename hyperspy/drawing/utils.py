@@ -425,7 +425,6 @@ def plot_images(images,
         raise ValueError("images must be a list of image signals."
                          " " + repr(type(images)) + " was given.")
 
-
     n = 0
     for i, sig in enumerate(images):
         if sig.axes_manager.signal_dimension != 2:
@@ -441,7 +440,8 @@ def plot_images(images,
         label_list = [signal_label + " " + repr(num) for num in range(n)]
     elif len(label_list) != n:
         raise ValueError("Length of label_list must be the same as the number of images to be plotted.\n"
-                         "Length of label_list was: " + repr(len(label_list)) + ";\n"
+                         "Length of label_list was: " +
+                         repr(len(label_list)) + ";\n"
                          "Number of images was: %i." % n)
 
     # Determine appropriate number of images per row
@@ -471,10 +471,11 @@ def plot_images(images,
                 print "RGB images, and has been disabled."
             single_colorbar = False
 
-    # If using a single colorbar, find global min and max values of all the images
+    # If using a single colorbar, find global min and max values of all the
+    # images
     if single_colorbar:
         gl_max, gl_min = max([images[i].data.max() for i in range(len(images))]), \
-                            min([images[i].data.min() for i in range(len(images))])
+            min([images[i].data.min() for i in range(len(images))])
 
     # Loop through each image, adding subplot for each one
     idx = 0
@@ -513,19 +514,19 @@ def plot_images(images,
             # to be set automatically if using individual colorbars
             if single_colorbar:
                 im = ax.imshow(data,
-                            cmap=cmap, extent=extent,
-                            interpolation=interp,
-                            vmin=gl_min, vmax=gl_max, *args, **kwargs)
+                               cmap=cmap, extent=extent,
+                               interpolation=interp,
+                               vmin=gl_min, vmax=gl_max, *args, **kwargs)
             else:
                 im = ax.imshow(data,
-                            cmap=cmap, extent=extent,
-                            interpolation=interp,
-                            *args, **kwargs)
+                               cmap=cmap, extent=extent,
+                               interpolation=interp,
+                               *args, **kwargs)
 
             # Label the axes
-            if type(axes[0].units) is trait_base._Undefined:
+            if isinstance(axes[0].units, trait_base._Undefined):
                 axes[0].units = 'pixels'
-            if type(axes[1].units) is trait_base._Undefined:
+            if isinstance(axes[1].units, trait_base._Undefined):
                 axes[1].units = 'pixels'
             plt.xlabel(axes[0].units)
             plt.ylabel(axes[1].units)
@@ -707,7 +708,8 @@ def plot_spectra(
     elif style == 'mosaic':
         default_fsize = plt.rcParams["figure.figsize"]
         figsize = (default_fsize[0], default_fsize[1] * len(spectra))
-        fig, subplots = plt.subplots(len(spectra), 1, figsize=figsize, **kwargs)
+        fig, subplots = plt.subplots(
+            len(spectra), 1, figsize=figsize, **kwargs)
         if legend is None:
             legend = [legend] * len(spectra)
         for spectrum, ax, color, line_style, legend in zip(spectra,
