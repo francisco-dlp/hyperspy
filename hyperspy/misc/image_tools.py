@@ -19,6 +19,7 @@
 import numpy as np
 import scipy as sp
 from scipy.fftpack import fftn, ifftn
+from scipy.ndimage import center_of_mass
 import matplotlib.pyplot as plt
 
 
@@ -185,3 +186,20 @@ def estimate_image_shift(ref, image, roi=None, sobel=True,
     del image
 
     return -np.array((shift0, shift1)), max_val
+
+
+def estimate_image_shift_com(ref, image, **kwargs):
+    """Estimate shift between two images using centre of mass.
+
+    Returns
+    -------
+    shift: tuple
+        The first element is a numpy array containing the shift coordinates.
+        The second element is always one for compatibility with
+        the current version of :meth:`~signal.Signal2D.estimate_shift2D`.
+
+    """
+    ref_com = np.asarray(center_of_mass(ref))
+    image_com = np.asarray(center_of_mass(image))
+    shift = (image_com - ref_com, 1.)
+    return shift
