@@ -19,6 +19,7 @@
 
 from __future__ import division
 import types
+import warnings
 
 import numpy as np
 import scipy as sp
@@ -38,6 +39,7 @@ from hyperspy import messages
 from hyperspy.decorators import do_not_replot
 from scipy import linalg
 from hyperspy.misc.machine_learning.orthomax import orthomax
+from hyperspy.misc.utils import stack
 
 
 def centering_and_whitening(X):
@@ -417,9 +419,12 @@ class MVA():
         diff_order : int
             Sometimes it is convenient to perform the BSS on the derivative
             of the signal. If diff_order is 0, the signal is not differentiated.
-        factors : numpy.array
-            Factors to decompose. If None, the BSS is performed on the result
-            of a previous decomposition.
+        factors : Signal or numpy array.
+            Factors to decompose. If None, the BSS is performed on the
+            factors of a previous decomposition. If a Signal instance the
+            navigation dimension must be 1 and the size greater than 1. If a
+            numpy array (deprecated) the factors are stored in a 2d array
+            stacked over the last axis.
         comp_list : boolen numpy array
             choose the components to use by the boolean list. It permits
              to choose non contiguous components.
@@ -429,12 +434,12 @@ class MVA():
         on_loadings : bool
             If True, perform the BSS on the loadings of a previous
             decomposition. If False, performs it on the factors.
-        pretreatment: dict
-
         **kwargs : extra key word arguments
             Any keyword arguments are passed to the BSS algorithm.
 
         """
+        from hyperspy.signal import Signal
+        from hyperspy._signals.spectrum import Spectrum
         target = self.learning_results
         if not hasattr(target, 'factors') or target.factors is None:
             raise AttributeError(
@@ -443,50 +448,70 @@ class MVA():
         else:
             if factors is None:
                 if on_loadings:
-                    factors = target.loadings
+                    factors = self.get_decomposition_loadings()
                 else:
-                    factors = target.factors
-            bool_index = np.zeros((factors.shape[0]), dtype='bool')
+                    factors = self.get_decomposition_factors()
+            elif not isinstance(factors, Signal):
+                if isinstance(factors, np.ndarray):
+                    warnings.warn(
+                        "factors as numpy arrays will raise an error in "
+                        "HyperSpy 0.9 and newer. From them on only passing "
+                        "factors as HyperSpy Signal instances will be "
+                        "supported.",
+                        DeprecationWarning)
+                    # We proceed supposing that the factors are spectra stacked
+                    # over the last dimension to reproduce the deprecated
+                    # behaviour.
+                    # TODO: Don't forget to change `factors` docstring when
+                    # removing this.
+                    factors = Spectrum(factors.T)
+                else:
+                    # Change next error message when removing the
+                    # DeprecationWarning
+                    raise ValueError(
+                        "`factors` must be either a Signal instance or a "
+                        "numpy array but an object of type %s was provided." %
+                        type(factors))
+            else:
+
+                if factors.axes_manager.navigation_dimension != 1:
+                    raise ValueError("`factors` must have navigation dimension"
+                                     "equal one, but the navigation dimension "
+                                     "of the given factors is %i." %
+                                     factors.axes_manager.navigation_dimension
+                                     )
+                elif factors.axes_manager.navigation_size < 2:
+                    raise ValueError("`factors` must have navigation size"
+                                     "greater than one, but the navigation "
+                                     "size of the given factors is %i." %
+                                     factors.axes_manager.navigation_size)
+
             if number_of_components is not None:
-                bool_index[:number_of_components] = True
+                comp_list = range(number_of_components)
+            elif comp_list is not None:
+                number_of_components = len(comp_list)
             else:
                 if target.output_dimension is not None:
                     number_of_components = target.output_dimension
-                    bool_index[:number_of_components] = True
+                    comp_list = range(number_of_components)
+                else:
+                    raise ValueError(
+                        "No `number_of_components` or `comp_list` provided.")
 
-            if comp_list is not None:
-                for ifactors in comp_list:
-                    bool_index[ifactors] = True
-                number_of_components = len(comp_list)
-            factors = factors[:, bool_index]
-
-            if pretreatment is not None:
-                from hyperspy._signals.spectrum import Spectrum
-                sfactors = Spectrum(factors.T)
-                if pretreatment['algorithm'] == 'savitzky_golay':
-                    sfactors.smooth_savitzky_golay(
-                        number_of_points=pretreatment[
-                            'number_of_points'],
-                        polynomial_order=pretreatment[
-                            'polynomial_order'],
-                        differential_order=diff_order)
-                if pretreatment['algorithm'] == 'tv':
-                    sfactors.smooth_tv(
-                        smoothing_parameter=pretreatment[
-                            'smoothing_parameter'],
-                        differential_order=diff_order)
-                factors = sfactors.data.T
-                if pretreatment['algorithm'] == 'butter':
-                    b, a = sp.signal.butter(pretreatment['order'],
-                                            pretreatment['cutoff'], pretreatment['type'])
-                    for i in range(factors.shape[1]):
-                        factors[:, i] = sp.signal.filtfilt(b, a,
-                                                           factors[:, i])
-            elif diff_order > 0:
-                factors = np.diff(factors, diff_order, axis=0)
-
+            factors = stack([factors.inav[i] for i in comp_list])
+            signal_dimension = factors.axes_manager.signal_dimension
+            if diff_order > 0:
+                if signal_dimension == 1:
+                    factors = factors.diff(order=diff_order, axis=-1)
+                else:
+                    # We'll deal with this in the following commit
+                    raise ValueError
+            # Unfold in case the signal_dimension > 1
+            factors.unfold()
             if mask is not None:
-                factors = factors[~mask]
+                factors = factors.data.T[~mask]
+            else:
+                factors = factors.data.T
 
             # first center and scale the data
             factors, invsqcovmat = centering_and_whitening(factors)
