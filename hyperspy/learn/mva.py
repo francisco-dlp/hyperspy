@@ -503,11 +503,26 @@ class MVA():
             if diff_order > 0:
                 if signal_dimension == 1:
                     factors = factors.diff(order=diff_order, axis=-1)
+            elif diff_order > 0:
+                if signal_dimension == 1:
+                    # 1-d case.
+                    factors = factors.diff(order=diff_order, axis=-1)
                 else:
-                    # We'll deal with this in the following commit
-                    raise ValueError
+                    # n-d signal case.
+                    # Compute the differences for each signal axis, unfold the
+                    # signal axes and stack the differences over the signal
+                    # axis.
+                    iaxes = [axis.index_in_axes_manager
+                             for axis in factors.axes_manager.signal_axes]
+                    diffs = [factors.diff(order=diff_order, axis=i)
+                             for i in iaxes]
+                    for signal in diffs:
+                        signal.unfold()
+                    factors = stack(diffs, axis=-1)
+                    del diffs
             # Unfold in case the signal_dimension > 1
             factors.unfold()
+            # TODO: mask doesn't work when diff_order > 0.
             if mask is not None:
                 factors = factors.data.T[~mask]
             else:
