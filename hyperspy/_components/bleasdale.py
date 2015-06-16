@@ -39,6 +39,7 @@ class Bleasdale(Component):
         # Define the parameters
         Component.__init__(self, ('a', 'b', 'c'))
         # Define the name of the component
+        self.c.value = -1. # the default, 0, is invalid.
 
     def function(self, x):
         """
