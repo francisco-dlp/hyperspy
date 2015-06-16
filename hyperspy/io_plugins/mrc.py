@@ -38,7 +38,7 @@ file_extensions = ['mrc', 'MRC', 'ALI', 'ali']
 default_extension = 0
 
 # Writing capabilities
-writes = False
+writes = [(2, 0), (2, 1), ]
 
 
 def get_std_dtype_list(endianess='<'):
@@ -204,3 +204,23 @@ def file_reader(filename, endianess='<', **kwds):
                   'original_metadata': original_metadata, }
 
     return [dictionary, ]
+
+
+def file_writer(filename,
+                signal,
+                *args, **kwds):
+    am = signal.axes_manager
+    is_stack = am.navigation_dimension != 0
+    header = np.zeros([1,], dtype=get_std_dtype_list())
+    header["NX"], header["NY"] = am.signal_dimension
+    header["NZ"] = am.navigation_dimension
+    for key1, key2 in zip(("NX", "NY", "NZ"), ("MX", "MY", "MZ")):
+        header[key2] = header[key1]
+        header["Xlen"] = am.signal_axes[0].scale * header["MX"]
+        header["Ylen"] = am.signal_axes[1].scale * header["MY"]
+    if is_stack:
+        header["Zlen"] = am.navigation_axes[0].scale * header["MZ"]
+
+
+    with file(filename, mode='w') as f:
+        pass
