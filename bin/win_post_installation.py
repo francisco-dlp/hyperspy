@@ -103,7 +103,9 @@ def install_hyperspy_here(hspy_qtconsole_logo_path, hspy_notebook_logo_path):
 
     # Install the context menu entries for the qtconsole and the IPython
     # notebook
-    logos = {'qtconsole': hspy_qtconsole_logo_path, 'notebook': hspy_notebook_logo_path}
+    logos = {
+        'qtconsole': hspy_qtconsole_logo_path,
+        'notebook': hspy_notebook_logo_path}
     for env in ('qtconsole', 'notebook'):
         script = os.path.join(sys.prefix, 'Scripts', "hyperspy_%s.bat" % env)
         if sys.getwindowsversion()[0] < 6.:  # Before Windows Vista
@@ -202,7 +204,7 @@ def install():
         start_menu = local_sm
     hyperspy_install_path = os.path.dirname(hyperspy.__file__)
     logo_path = os.path.expandvars(os.path.join(hyperspy_install_path,
-                                   'data'))
+                                                'data'))
     hspy_qt_logo_path = os.path.join(logo_path,
                                      'hyperspy_qtconsole_logo.ico')
     hspy_nb_logo_path = os.path.join(logo_path,
