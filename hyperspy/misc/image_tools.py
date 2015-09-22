@@ -204,6 +204,7 @@ def estimate_image_shift_com(ref, image, **kwargs):
     shift = (image_com - ref_com, 1.)
     return shift
 
+
 def contrast_stretching(data, saturated_pixels):
     """Calculate bounds that leaves out a given percentage of the data.
 

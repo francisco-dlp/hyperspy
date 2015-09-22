@@ -219,14 +219,14 @@ class Signal2DTools(object):
                     ref = im.copy()
                     shift = np.array([0, 0])
                 nshift, max_val = shift_function(ref,
-                                                       im,
-                                                       roi=roi,
-                                                       sobel=sobel,
-                                                       medfilter=medfilter,
-                                                       hanning=hanning,
-                                                       plot=plot,
-                                                       normalize_corr=normalize_corr,
-                                                       dtype=dtype)
+                                                 im,
+                                                 roi=roi,
+                                                 sobel=sobel,
+                                                 medfilter=medfilter,
+                                                 hanning=hanning,
+                                                 plot=plot,
+                                                 normalize_corr=normalize_corr,
+                                                 dtype=dtype)
                 if reference == 'cascade':
                     shift += nshift
                     ref = im.copy()
