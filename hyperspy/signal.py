@@ -289,6 +289,7 @@ class Signal2DTools(object):
             shifts=None,
             expand=False,
             mode="constant",
+            interpolation_order=1,
             roi=None,
             sobel=True,
             medfilter=True,
@@ -350,35 +351,35 @@ class Signal2DTools(object):
         """
         self._check_signal_dimension_equals_two()
         if shifts is None:
-            shifts=self.estimate_shift2D(
-                method = method,
-                roi = roi,
-                sobel = sobel,
-                medfilter = medfilter,
-                hanning = hanning,
-                plot = plot,
-                reference = reference,
-                dtype = dtype,
-                correlation_threshold = correlation_threshold,
-                normalize_corr = normalize_corr,
-                chunk_size = chunk_size)
-            return_shifts=True
+            shifts = self.estimate_shift2D(
+                method=method,
+                roi=roi,
+                sobel=sobel,
+                medfilter=medfilter,
+                hanning=hanning,
+                plot=plot,
+                reference=reference,
+                dtype=dtype,
+                correlation_threshold=correlation_threshold,
+                normalize_corr=normalize_corr,
+                chunk_size=chunk_size)
+            return_shifts = True
         else:
-            return_shifts=False
+            return_shifts = False
 
         if expand:
             # Expand to fit all valid data
-            left, right=(int(np.floor(shifts[:, 1].min())) if
+            left, right = (int(np.floor(shifts[:, 1].min())) if
                            shifts[:, 1].min() < 0 else 0,
                            int(np.ceil(shifts[:, 1].max())) if
                            shifts[:, 1].max() > 0 else 0)
-            top, bottom=(int(np.floor(shifts[:, 0].min())) if
+            top, bottom = (int(np.floor(shifts[:, 0].min())) if
                            shifts[:, 0].min() < 0 else 0,
                            int(np.ceil(shifts[:, 0].max())) if
                            shifts[:, 0].max() > 0 else 0)
-            xaxis=self.axes_manager.signal_axes[0]
-            yaxis=self.axes_manager.signal_axes[1]
-            padding=[]
+            xaxis = self.axes_manager.signal_axes[0]
+            yaxis = self.axes_manager.signal_axes[1]
+            padding = []
             for i in xrange(self.data.ndim):
                 if i == xaxis.index_in_array:
                     padding.append((right, -left))
@@ -403,14 +404,14 @@ class Signal2DTools(object):
             if np.any(shift):
                 shift_image(im, -shift,
                             fill_value=fill_value,
-                            interpolation_order=interpolation_order)
+                            interpolation_order=interpolation_order,
                             mode=mode)
                 del im
 
         if crop and not expand:
             # Crop the image to the valid size
-            shifts = -shifts
-            bottom, top = (int(np.floor(shifts[:, 0].min())) if
+            shifts=-shifts
+            bottom, top=(int(np.floor(shifts[:, 0].min())) if
                            shifts[:, 0].min() < 0 else None,
                            int(np.ceil(shifts[:, 0].max())) if
                            shifts[:, 0].max() > 0 else 0)

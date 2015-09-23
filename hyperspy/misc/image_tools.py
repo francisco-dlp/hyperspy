@@ -23,7 +23,8 @@ from scipy.ndimage import center_of_mass
 import matplotlib.pyplot as plt
 
 
-def shift_image(im, shift, fill_value=np.nan, interpolation_order=1, mode='constant'):
+def shift_image(
+        im, shift, fill_value=np.nan, interpolation_order=1, mode='constant'):
     fractional, integral = np.modf(shift)
     if fractional.any():
         order = interpolation_order
