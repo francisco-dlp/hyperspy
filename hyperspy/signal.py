@@ -364,8 +364,11 @@ class Signal2DTools(object):
                     padding.append((bottom, -top))
                 else:
                     padding.append((0, 0))
-            self.data = np.pad(self.data, padding, mode=mode,
-                               constant_values=(fill_value,))
+            self.data = np.pad(
+                self.data,
+                padding,
+                mode=mode if mode != "nearest" else "edge",
+                constant_values=(fill_value,))
             if left < 0:
                 xaxis.offset += left * xaxis.scale
             if np.any((left < 0, right > 0)):
