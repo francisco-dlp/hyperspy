@@ -265,22 +265,22 @@ class Signal2DTools(object):
         return shifts
 
     def align2D(
-        self,
-        crop=True,
-        fill_value=np.nan,
-        shifts=None,
-        expand=False,
-        mode="constant",
-        roi=None,
-        sobel=True,
-        medfilter=True,
-        hanning=True,
-        plot=False,
-        normalize_corr=False,
-        reference='current',
-        dtype='float',
-        correlation_threshold=None,
-        chunk_size=30):
+            self,
+            crop=True,
+            fill_value=np.nan,
+            shifts=None,
+            expand=False,
+            mode="constant",
+            roi=None,
+            sobel=True,
+            medfilter=True,
+            hanning=True,
+            plot=False,
+            normalize_corr=False,
+            reference='current',
+            dtype='float',
+            correlation_threshold=None,
+            chunk_size=30):
         """Align the images in place using user provided shifts or by
         estimating the shifts.
 
