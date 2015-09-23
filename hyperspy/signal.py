@@ -410,8 +410,8 @@ class Signal2DTools(object):
 
         if crop and not expand:
             # Crop the image to the valid size
-            shifts=-shifts
-            bottom, top=(int(np.floor(shifts[:, 0].min())) if
+            shifts = -shifts
+            bottom, top = (int(np.floor(shifts[:, 0].min())) if
                            shifts[:, 0].min() < 0 else None,
                            int(np.ceil(shifts[:, 0].max())) if
                            shifts[:, 0].max() > 0 else 0)
