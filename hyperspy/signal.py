@@ -62,7 +62,10 @@ from hyperspy.decorators import only_interactive
 from hyperspy.decorators import interactive_range_selector
 from scipy.ndimage.filters import gaussian_filter1d
 from hyperspy.misc.spectrum_tools import find_peaks_ohaver
-from hyperspy.misc.image_tools import (shift_image, estimate_image_shift)
+from hyperspy.misc.image_tools import (
+    shift_image,
+    estimate_image_shift,
+    estimate_image_shift_com)
 from hyperspy.misc.math_tools import symmetrize, antisymmetrize
 from hyperspy.exceptions import SignalDimensionError, DataDimensionError
 from hyperspy.misc import array_tools
@@ -89,7 +92,8 @@ class Signal2DTools(object):
                          hanning=True,
                          plot=False,
                          dtype='float',
-                         show_progressbar=None):
+                         show_progressbar=None,
+                         method="correlation"):
         """Estimate the shifts in a image using phase correlation
 
         This method can only estimate the shift by comparing
@@ -136,6 +140,7 @@ class Signal2DTools(object):
         show_progressbar : None or bool
             If True, display a progress bar. If None the default is set in
             `preferences`.
+        method: {"correlation", "centre_of_mass"}
 
         Returns
         -------
@@ -158,6 +163,14 @@ class Signal2DTools(object):
         Ultramicroscopy 102, no. 1 (December 2004): 27–36.
 
         """
+        if method == "correlation":
+            shift_function = estimate_image_shift
+        elif method == "centre_of_mass":
+            shift_function = estimate_image_shift_com
+        else:
+            raise ValueError(
+                "Method has to be correlation or centre_of_mass but"
+                "%s was given instead." % method)
         if show_progressbar is None:
             show_progressbar = preferences.General.show_progressbar
         self._check_signal_dimension_equals_two()
@@ -181,7 +194,7 @@ class Signal2DTools(object):
                                dtype=np.dtype([('max_value', np.float),
                                                ('shift', np.int32,
                                                 (2,))]))
-            nshift, max_value = estimate_image_shift(
+            nshift, max_value = shift_function(
                 self(),
                 self(),
                 roi=roi,
@@ -205,10 +218,15 @@ class Signal2DTools(object):
                 if ref is None:
                     ref = im.copy()
                     shift = np.array([0, 0])
-                nshift, max_val = estimate_image_shift(
-                    ref, im, roi=roi, sobel=sobel, medfilter=medfilter,
-                    hanning=hanning, plot=plot,
-                    normalize_corr=normalize_corr, dtype=dtype)
+                nshift, max_val = shift_function(ref,
+                                                 im,
+                                                 roi=roi,
+                                                 sobel=sobel,
+                                                 medfilter=medfilter,
+                                                 hanning=hanning,
+                                                 plot=plot,
+                                                 normalize_corr=normalize_corr,
+                                                 dtype=dtype)
                 if reference == 'cascade':
                     shift += nshift
                     ref = im.copy()
@@ -223,7 +241,7 @@ class Signal2DTools(object):
                 for i2, im2 in enumerate(
                         self._iterate_signal()):
                     if i2 > i1:
-                        nshift, max_value = estimate_image_shift(
+                        nshift, max_value = shift_function(
                             im,
                             im2,
                             roi=roi,
@@ -264,7 +282,10 @@ class Signal2DTools(object):
             del ref
         return shifts
 
-    def align2D(self, crop=True, fill_value=np.nan, shifts=None, expand=False,
+    def align2D(self,
+                crop=True,
+                fill_value=np.nan,
+                shifts=None,
                 roi=None,
                 sobel=True,
                 medfilter=True,
@@ -276,6 +297,8 @@ class Signal2DTools(object):
                 correlation_threshold=None,
                 chunk_size=30,
                 interpolation_order=1):
+                method="correlation",
+                ):
         """Align the images in place using user provided shifts or by
         estimating the shifts.
 
@@ -325,6 +348,7 @@ class Signal2DTools(object):
         self._check_signal_dimension_equals_two()
         if shifts is None:
             shifts = self.estimate_shift2D(
+                method=method,
                 roi=roi,
                 sobel=sobel,
                 medfilter=medfilter,
