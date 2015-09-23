@@ -282,23 +282,23 @@ class Signal2DTools(object):
             del ref
         return shifts
 
-    def align2D(self,
-                crop=True,
-                fill_value=np.nan,
-                shifts=None,
-                roi=None,
-                sobel=True,
-                medfilter=True,
-                hanning=True,
-                plot=False,
-                normalize_corr=False,
-                reference='current',
-                dtype='float',
-                correlation_threshold=None,
-                chunk_size=30,
-                interpolation_order=1):
-                method = "correlation",
-                ):
+    def align2D(
+            self,
+            crop=True,
+            fill_value=np.nan,
+            shifts=None,
+            expand=False,
+            mode="constant",
+            roi=None,
+            sobel=True,
+            medfilter=True,
+            hanning=True,
+            plot=False,
+            normalize_corr=False,
+            reference='current',
+            dtype='float',
+            correlation_threshold=None,
+            chunk_size=30):
         """Align the images in place using user provided shifts or by
         estimating the shifts.
 
@@ -323,7 +323,10 @@ class Signal2DTools(object):
         interpolation_order: int, default 1.
             The order of the spline interpolation. Default is 1, linear
             interpolation.
-
+        mode : str, optional
+            Points outside the boundaries of the input are filled according
+            to the given mode ('constant', 'nearest', 'reflect' or 'wrap').
+            Default is 'constant'.
         Returns
         -------
         shifts : np.array
@@ -383,8 +386,8 @@ class Signal2DTools(object):
                     padding.append((bottom, -top))
                 else:
                     padding.append((0, 0))
-            self.data=np.pad(self.data, padding, mode = 'constant',
-                               constant_values = (fill_value,))
+            self.data = np.pad(self.data, padding, mode=mode,
+                               constant_values=(fill_value,))
             if left < 0:
                 xaxis.offset += left * xaxis.scale
             if np.any((left < 0, right > 0)):
@@ -401,6 +404,7 @@ class Signal2DTools(object):
                 shift_image(im, -shift,
                             fill_value=fill_value,
                             interpolation_order=interpolation_order)
+                            mode=mode)
                 del im
 
         if crop and not expand:

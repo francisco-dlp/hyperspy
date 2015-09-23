@@ -23,14 +23,19 @@ from scipy.ndimage import center_of_mass
 import matplotlib.pyplot as plt
 
 
-def shift_image(im, shift, fill_value=np.nan, interpolation_order=1):
+def shift_image(im, shift, fill_value=np.nan, interpolation_order=1, mode='constant'):
     fractional, integral = np.modf(shift)
     if fractional.any():
         order = interpolation_order
     else:
         # Disable interpolation
         order = 0
-    im[:] = sp.ndimage.shift(im, shift, cval=fill_value, order=order)
+    im[:] = sp.ndimage.shift(
+        im,
+        shift,
+        cval=fill_value,
+        order=order,
+        mode=mode)
 
 
 def triu_indices_minus_diag(n):
