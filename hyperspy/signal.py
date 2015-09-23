@@ -264,17 +264,23 @@ class Signal2DTools(object):
             del ref
         return shifts
 
-    def align2D(self, crop=True, fill_value=np.nan, shifts=None, expand=False,
-                roi=None,
-                sobel=True,
-                medfilter=True,
-                hanning=True,
-                plot=False,
-                normalize_corr=False,
-                reference='current',
-                dtype='float',
-                correlation_threshold=None,
-                chunk_size=30):
+    def align2D(
+        self,
+        crop=True,
+        fill_value=np.nan,
+        shifts=None,
+        expand=False,
+        mode="constant",
+        roi=None,
+        sobel=True,
+        medfilter=True,
+        hanning=True,
+        plot=False,
+        normalize_corr=False,
+        reference='current',
+        dtype='float',
+        correlation_threshold=None,
+        chunk_size=30):
         """Align the images in place using user provided shifts or by
         estimating the shifts.
 
@@ -296,7 +302,10 @@ class Signal2DTools(object):
         expand : bool
             If True, the data will be expanded to fit all data after alignment.
             Overrides `crop`.
-
+        mode : str, optional
+            Points outside the boundaries of the input are filled according
+            to the given mode ('constant', 'nearest', 'reflect' or 'wrap').
+            Default is 'constant'.
         Returns
         -------
         shifts : np.array
@@ -355,7 +364,7 @@ class Signal2DTools(object):
                     padding.append((bottom, -top))
                 else:
                     padding.append((0, 0))
-            self.data = np.pad(self.data, padding, mode='constant',
+            self.data = np.pad(self.data, padding, mode=mode,
                                constant_values=(fill_value,))
             if left < 0:
                 xaxis.offset += left * xaxis.scale
@@ -371,7 +380,8 @@ class Signal2DTools(object):
                              shifts):
             if np.any(shift):
                 shift_image(im, -shift,
-                            fill_value=fill_value)
+                            fill_value=fill_value,
+                            mode=mode)
                 del im
 
         if crop and not expand:
