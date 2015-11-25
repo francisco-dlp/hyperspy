@@ -546,8 +546,6 @@ class BaseModel(list):
             if weights is not None:
                 errfunc *= weights
             status = 0
-            # TODO: adapted for 2D by reshaping errfunc to be 1D
-            errfunc = errfunc.ravel()
             return [status, errfunc]
         else:
             return [0, self._jacobian(p, y).T]
@@ -750,10 +748,10 @@ class BaseModel(list):
                           'weights': weights}, autoderivative=autoderivative,
                       quiet=1)
             self.p0 = m.params
-            if (self.axis.size > len(self.p0)) and m.perror is not None:
-                self.p_std = m.perror * np.sqrt(
-                    (self._errfunc(self.p0, *args) ** 2).sum() /
-                    (len(args[0]) - len(self.p0)))
+            # if (self.axis.size > len(self.p0)) and m.perror is not None:
+            #     self.p_std = m.perror * np.sqrt(
+            #         (self._errfunc(self.p0, *args) ** 2).sum() /
+            #         (len(args[0]) - len(self.p0)))
             self.fit_output = m
         else:
             # General optimizers (incluiding constrained ones(tnc,l_bfgs_b)
@@ -1410,21 +1408,24 @@ class Model2D(BaseModel):
         numpy array
         """
 
-        sum_ = np.zeros_like(self.xaxis)
+        xaxis, yaxis = (self.xaxis[self.channel_switches],
+                        self.yaxis[self.channel_switches])
+        sum_ = np.zeros((len(xaxis),), dtype=self.signal.data.dtype)
         if onlyactive is True:
             for component in self:  # Cut the parameters list
                 if component.active:
-                    np.add(sum_, component.function(self.xaxis, self.yaxis),
+                    np.add(sum_, component.function(xaxis, yaxis),
                            sum_)
         else:
             for component in self:  # Cut the parameters list
-                np.add(sum_, component.function(self.xaxis, self.yaxis),
+                np.add(sum_, component.function(xaxis, yaxis),
                        sum_)
         return sum_
 
     def _model_function(self, param):
 
-        xaxis, yaxis = (self.xaxis, self.yaxis)
+        xaxis, yaxis = (self.xaxis[self.channel_switches],
+                        self.yaxis[self.channel_switches])
         counter = 0
         first = True
         for component in self:  # Cut the parameters list
