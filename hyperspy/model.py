@@ -1341,6 +1341,7 @@ class Model2D(BaseModel):
     TODO: add docstring specific for 2D model
     """
     # Rewrite in progress dnj23 06/05/15
+
     def __init__(self, image):
         self.signal = image
         self.axes_manager = self.signal.axes_manager
@@ -1369,7 +1370,8 @@ class Model2D(BaseModel):
         self.components = ModelComponents(self)
 
     def __repr__(self):
-        return u"<2D Model %s>".encode('utf8') % super(Model2D, self).__repr__()
+        return u"<2D Model %s>".encode(
+            'utf8') % super(Model2D, self).__repr__()
 
     @property
     def image(self):
@@ -1432,12 +1434,12 @@ class Model2D(BaseModel):
             if component.active:
                 if first is True:
                     sum = component.__tempcall2d__(param[counter:counter +
-                                                   component._nfree_param],
+                                                         component._nfree_param],
                                                    xaxis, yaxis)
                     first = False
                 else:
                     sum += component.__tempcall2d__(param[counter:counter +
-                                                    component._nfree_param],
+                                                          component._nfree_param],
                                                     xaxis, yaxis)
                 counter += component._nfree_param
         return sum
