@@ -1,5 +1,6 @@
 import sys
 import inspect
+from traits.api import HasTraits, MetaHasTraits
 
 
 class EventsSuppressionContext(object):
@@ -198,6 +199,13 @@ class Event(object):
             if function in c:
                 c.remove(function)
 
+    @staticmethod
+    def _trigger_nargs(f, args, nargs):
+        """
+        Basic trigger resolution.
+        """
+        return f(*args[0:nargs])
+
     def trigger(self, *args, **kwargs):
         if not self._suppress:
             # Loop on copy to deal with callbacks which change connections
@@ -211,9 +219,60 @@ class Event(object):
                             ("Tried to call %s which require %d args " +
                              "with only %d.") % (str(c), nargs, len(args)))
                     for f in c.copy():
-                        f(*args[0:nargs])
+                        self._trigger_nargs(f, args, nargs)
 
     def __deepcopy__(self, memo):
         dc = type(self)()
         memo[id(self)] = dc
         return dc
+
+
+class TraitEvent(Event):
+
+    def trigger(self, obj, name, old, new):
+        super(TraitEvent, self).trigger(obj, name, old, new)
+
+    @staticmethod
+    def _trigger_nargs(f, args, nargs):
+        """
+        Emulates traits resolution:
+            handler()
+            handler(new)
+            handler(name, new)
+            handler(object, name, new)
+            handler(object, name, old, new)
+        """
+        if nargs == 0:
+            return f()
+        elif nargs == 1:
+            return f(args[3])
+        elif nargs == 2:
+            return f(args[1], args[3])
+        elif nargs == 3:
+            return f(args[0], args[1], args[3])
+        elif nargs == 4:
+            return f(*args)
+
+
+traits_filter = ['trait_added', 'trait_modified', 'events']
+
+
+def _wrap_trait(collection, obj, name):
+    e = TraitEvent()
+    setattr(collection, name + "_changed", e)
+    obj.on_trait_change(e.trigger, name)
+
+
+class HasEventsTraits(HasTraits):
+    def __init__(self, *args, **kwargs):
+        super(HasEventsTraits, self).__init__(*args, **kwargs)
+        # Setup events container if missing
+        if not hasattr(self, 'events'):
+            self.events = Events()
+
+        # Wrap traits
+        if isinstance(self, HasTraits):
+            for t in self.traits().iterkeys():
+                if t in traits_filter:
+                    continue
+                _wrap_trait(self.events, self, t)
