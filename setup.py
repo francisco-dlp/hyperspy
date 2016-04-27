@@ -29,7 +29,6 @@ if v[0] != 3:
     sys.exit(1)
 
 from distutils.core import setup
-from distutils.extension import Extension
 
 import distutils.dir_util
 
@@ -52,8 +51,7 @@ install_req = ['scipy',
                'natsort',
                'requests',
                'setuptools',
-               'sympy',
-               'lxml']
+               'sympy']
 
 
 class update_version_when_dev:
@@ -113,8 +111,6 @@ with update_version_when_dev() as version:
         name="hyperspy",
         package_dir={'hyperspy': 'hyperspy'},
         version=version,
-        ext_modules=[Extension("hyperspy.io_plugins.unbcf_fast",
-                               ['hyperspy/io_plugins/unbcf_fast.c'])],
         packages=['hyperspy',
                   'hyperspy.datasets',
                   'hyperspy._components',
