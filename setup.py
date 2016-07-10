@@ -263,7 +263,6 @@ distutils.sysconfig.customize_compiler(compiler)
 try:
     compiler.compile([os.path.join(setup_path,
                                    'hyperspy/tests/misc/test_compilers.c')])
-    setup_kwargs['ext_modules'] = extensions
 except CompileError:
     warnings.warn("""WARNING: C compiler can't be found.
 Only slow pure python alternative functions will be available.
@@ -271,10 +270,11 @@ To use fast implementation of some functions writen in cython/c either:
 a) check that you have compiler (EXACTLY SAME as your python
 distribution was compiled with) installed,
 b) use binary distribution of hyperspy (i.e. wheels, egg, (only osx and win)).
-Installation will continue in 10 sec...""")
-    extensions = None
+Installation will continue in 7 sec...""")
     from time import sleep
-    sleep(10) #wait 10 secs for user to notice the message
+    sleep(7) #wait 7 secs for user to notice the message
+else:
+    setup_kwargs['ext_modules'] = extensions
 
 
 # HOOKS ######
