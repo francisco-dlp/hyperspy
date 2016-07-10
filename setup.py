@@ -262,7 +262,7 @@ assert isinstance(compiler, distutils.ccompiler.CCompiler)
 distutils.sysconfig.customize_compiler(compiler)
 try:
     compiler.compile([os.path.join(setup_path,
-                                   'hyperspy/tests/misc/test_compilers.c')])
+                                   'hyperspy/misc/etc/test_compilers.c')])
 except CompileError:
     warnings.warn("""WARNING: C compiler can't be found.
 Only slow pure python alternative functions will be available.
