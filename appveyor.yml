@@ -117,6 +117,7 @@ before_deploy:
   - "%CMD_IN_ENV% python.exe -c \"import sys; print(sys.version)\""
   - "%CMD_IN_ENV% python.exe setup.py recythonize"
   - "%CMD_IN_ENV% python.exe setup.py install"
+  - ps: Add-AppveyorMessage "Restoring pydistutils.cfg..."
   - "Rename-Item %WP_INSTDIR%\\settings\\pydistutils_bak.cfg pydistutils.cfg"
   # Custom installer step
   # TODO: Re-run tests in WinPython environment
