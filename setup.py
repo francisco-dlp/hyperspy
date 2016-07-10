@@ -154,7 +154,7 @@ a) check that you have compiler (EXACTLY SAME as your python
 distribution was compiled with) installed,
 b) use binary distribution of hyperspy (i.e. wheels, egg, (only osx and win)).
 Installation will continue in 10 sec...""")
-    extensions = []
+    extensions = None
     from time import sleep
     sleep(10) #wait 10 secs for user to notice the message
 
