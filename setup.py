@@ -74,10 +74,127 @@ def update_version(version):
         f.writelines(lines)
 
 
+class Recythonize(Command):
+    """cythonize all extensions"""
+    description = "(re-)cythonize all changed cython extensions"
+
+    user_options = []
+
+    def initialize_options(self):
+        """init options"""
+        pass
+
+    def finalize_options(self):
+        """finalize options"""
+        pass
+
+    def run(self):
+        # if there is no cython it is supposed to fail:
+        from Cython.Build import cythonize
+        global raw_extensions
+        global extensions
+        cythonize(extensions)
+
+
 # Extensions. Add your extension here:
 raw_extensions = [Extension("hyperspy.tests.misc.cython.test_cython_integration",
                         ['hyperspy/tests/misc/cython/test_cython_integration.pyx']),
                  ]
+
+setup_kwargs = {
+	'name': "hyperspy",
+    'package_dir': {'hyperspy': 'hyperspy'},
+    'packages': ['hyperspy',
+               'hyperspy.datasets',
+               'hyperspy._components',
+               'hyperspy.datasets',
+               'hyperspy.io_plugins',
+               'hyperspy.docstrings',
+               'hyperspy.drawing',
+               'hyperspy.drawing._markers',
+               'hyperspy.drawing._widgets',
+               'hyperspy.learn',
+               'hyperspy._signals',
+               'hyperspy.gui',
+               'hyperspy.utils',
+               'hyperspy.tests',
+               'hyperspy.tests.axes',
+               'hyperspy.tests.component',
+               'hyperspy.tests.datasets',
+               'hyperspy.tests.drawing',
+               'hyperspy.tests.io',
+               'hyperspy.tests.model',
+               'hyperspy.tests.mva',
+               'hyperspy.tests.signal',
+               'hyperspy.tests.utils',
+               'hyperspy.tests.misc',
+               'hyperspy.models',
+               'hyperspy.misc',
+               'hyperspy.misc.eels',
+               'hyperspy.misc.eds',
+               'hyperspy.misc.io',
+               'hyperspy.misc.machine_learning',
+               'hyperspy.external',
+               'hyperspy.external.mpfit',
+               'hyperspy.external.astroML',
+               ],
+    'install_requires': install_req,
+    'setup_requires': [
+                     'setuptools'
+                    ],
+    'package_data': {
+       'hyperspy':
+           [
+            'misc/eds/example_signals/*.hdf5',
+            'tests/io/blockfile_data/*.blo',
+            'tests/io/dens_data/*.dens',
+            'tests/io/dm_stackbuilder_plugin/test_stackbuilder_imagestack.dm3',
+            'tests/io/dm3_1D_data/*.dm3',
+            'tests/io/dm3_2D_data/*.dm3',
+            'tests/io/dm3_3D_data/*.dm3',
+            'tests/io/dm4_1D_data/*.dm4',
+            'tests/io/dm4_2D_data/*.dm4',
+            'tests/io/dm4_3D_data/*.dm4',
+            'tests/io/FEI_new/*.emi',
+            'tests/io/FEI_new/*.ser',
+            'tests/io/FEI_new/*.npy',
+            'tests/io/FEI_old/*.emi',
+            'tests/io/FEI_old/*.ser',
+            'tests/io/FEI_old/*.npy',
+            'tests/io/msa_files/*.msa',
+            'tests/io/hdf5_files/*.hdf5',
+            'tests/io/tiff_files/*.tif',
+            'tests/io/npy_files/*.npy',
+            'tests/io/unf_files/*.unf',
+            'tests/drawing/*.ipynb',
+            'tests/signal/test_find_peaks1D_ohaver/test_find_peaks1D_ohaver.hdf5',
+           ],
+        },
+    'author': Release.authors['all'][0],
+    'author_email': Release.authors['all'][1],
+    'maintainer': 'Francisco de la Peña',
+    'maintainer_email': 'fjd29@cam.ac.uk',
+    'description': Release.description,
+    'long_description': open('README.rst').read(),
+    'license': Release.license,
+    'platforms': Release.platforms,
+    'url': Release.url,
+    'keywords': Release.keywords,
+    'cmdclass': {
+        'recythonize': Recythonize,
+        },
+    'classifiers':[
+            "Programming Language :: Python :: 3",
+            "Development Status :: 4 - Beta",
+            "Environment :: Console",
+            "Intended Audience :: Science/Research",
+            "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+            "Natural Language :: English",
+            "Operating System :: OS Independent",
+            "Topic :: Scientific/Engineering",
+            "Topic :: Scientific/Engineering :: Physics",
+        ],}
+
 
 cleanup_list = []
 for leftover in raw_extensions:
@@ -146,6 +263,7 @@ distutils.sysconfig.customize_compiler(compiler)
 try:
     compiler.compile([os.path.join(setup_path,
                                    'hyperspy/tests/misc/test_compilers.c')])
+    setup_kwargs['ext_modules'] = extensions
 except CompileError:
     warnings.warn("""WARNING: C compiler can't be found.
 Only slow pure python alternative functions will be available.
@@ -200,28 +318,6 @@ if os.path.exists(git_dir) and (not os.path.exists(hook_ignorer)):
                 pchook.writelines(hook_lines)
 
 
-class Recythonize(Command):
-    """cythonize all extensions"""
-    description = "(re-)cythonize all changed cython extensions"
-
-    user_options = []
-
-    def initialize_options(self):
-        """init options"""
-        pass
-
-    def finalize_options(self):
-        """finalize options"""
-        pass
-
-    def run(self):
-        # if there is no cython it is supposed to fail:
-        from Cython.Build import cythonize
-        global raw_extensions
-        global extensions
-        cythonize(extensions)
-
-
 class update_version_when_dev:
 
     def __enter__(self):
@@ -257,99 +353,5 @@ class update_version_when_dev:
 
 
 with update_version_when_dev() as version:
-    setup(
-        name="hyperspy",
-        package_dir={'hyperspy': 'hyperspy'},
-        version=version,
-        ext_modules=extensions,
-        packages=['hyperspy',
-                  'hyperspy.datasets',
-                  'hyperspy._components',
-                  'hyperspy.datasets',
-                  'hyperspy.io_plugins',
-                  'hyperspy.docstrings',
-                  'hyperspy.drawing',
-                  'hyperspy.drawing._markers',
-                  'hyperspy.drawing._widgets',
-                  'hyperspy.learn',
-                  'hyperspy._signals',
-                  'hyperspy.gui',
-                  'hyperspy.utils',
-                  'hyperspy.tests',
-                  'hyperspy.tests.axes',
-                  'hyperspy.tests.component',
-                  'hyperspy.tests.datasets',
-                  'hyperspy.tests.drawing',
-                  'hyperspy.tests.io',
-                  'hyperspy.tests.model',
-                  'hyperspy.tests.mva',
-                  'hyperspy.tests.signal',
-                  'hyperspy.tests.utils',
-                  'hyperspy.tests.misc',
-                  'hyperspy.models',
-                  'hyperspy.misc',
-                  'hyperspy.misc.eels',
-                  'hyperspy.misc.eds',
-                  'hyperspy.misc.io',
-                  'hyperspy.misc.machine_learning',
-                  'hyperspy.external',
-                  'hyperspy.external.mpfit',
-                  'hyperspy.external.astroML',
-                  ],
-        install_requires=install_req,
-        setup_requires=[
-            'setuptools'
-        ],
-        package_data={
-            'hyperspy':
-            [
-                'misc/eds/example_signals/*.hdf5',
-                'tests/io/blockfile_data/*.blo',
-                'tests/io/dens_data/*.dens',
-                'tests/io/dm_stackbuilder_plugin/test_stackbuilder_imagestack.dm3',
-                'tests/io/dm3_1D_data/*.dm3',
-                'tests/io/dm3_2D_data/*.dm3',
-                'tests/io/dm3_3D_data/*.dm3',
-                'tests/io/dm4_1D_data/*.dm4',
-                'tests/io/dm4_2D_data/*.dm4',
-                'tests/io/dm4_3D_data/*.dm4',
-                'tests/io/FEI_new/*.emi',
-                'tests/io/FEI_new/*.ser',
-                'tests/io/FEI_new/*.npy',
-                'tests/io/FEI_old/*.emi',
-                'tests/io/FEI_old/*.ser',
-                'tests/io/FEI_old/*.npy',
-                'tests/io/msa_files/*.msa',
-                'tests/io/hdf5_files/*.hdf5',
-                'tests/io/tiff_files/*.tif',
-                'tests/io/npy_files/*.npy',
-                'tests/io/unf_files/*.unf',
-                'tests/drawing/*.ipynb',
-                'tests/signal/test_find_peaks1D_ohaver/test_find_peaks1D_ohaver.hdf5',
-            ],
-        },
-        author=Release.authors['all'][0],
-        author_email=Release.authors['all'][1],
-        maintainer='Francisco de la Peña',
-        maintainer_email='fjd29@cam.ac.uk',
-        description=Release.description,
-        long_description=open('README.rst').read(),
-        license=Release.license,
-        platforms=Release.platforms,
-        url=Release.url,
-        keywords=Release.keywords,
-        cmdclass={
-        'recythonize': Recythonize,
-        },
-        classifiers=[
-            "Programming Language :: Python :: 3",
-            "Development Status :: 4 - Beta",
-            "Environment :: Console",
-            "Intended Audience :: Science/Research",
-            "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
-            "Natural Language :: English",
-            "Operating System :: OS Independent",
-            "Topic :: Scientific/Engineering",
-            "Topic :: Scientific/Engineering :: Physics",
-        ],
-    )
+    setup_kwargs['version'] = version
+    setup(**setup_kwargs)
