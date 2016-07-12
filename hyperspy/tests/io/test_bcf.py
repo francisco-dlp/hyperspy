@@ -67,8 +67,8 @@ def test_hyperspy_wrap():
     filename = os.path.join(my_path, 'bcf_data', test_files[0])
     print('testing bcf wrap to hyperspy signal...')
     hype = load(filename, select_type='spectrum')
-    assert_almost_equal(hype.axes_manager[0].scale, 8.736785062e-06, places=12)
-    assert_almost_equal(hype.axes_manager[1].scale, 8.736785062e-06, places=12)
+    assert_almost_equal(hype.axes_manager[0].scale, 8.7367850619778, places=12)
+    assert_almost_equal(hype.axes_manager[1].scale, 8.7367850619778, places=12)
     assert_true(hype.axes_manager[1].units == 'm')
     assert_almost_equal(hype.axes_manager[2].scale, 10.001)
     assert_almost_equal(hype.axes_manager[2].offset, -472.397235)
@@ -80,8 +80,8 @@ def test_hyperspy_wrap_downsampled():
     filename = os.path.join(my_path, 'bcf_data', test_files[0])
     print('testing bcf wrap to hyperspy signal...')
     hype = load(filename, select_type='spectrum', downsample=5)
-    assert_almost_equal(hype.axes_manager[0].scale, 4.368392531e-05, places=12)
-    assert_almost_equal(hype.axes_manager[1].scale, 4.368392531e-05, places=12)
+    assert_almost_equal(hype.axes_manager[0].scale, 43.683925309889, places=12)
+    assert_almost_equal(hype.axes_manager[1].scale, 43.683925309889, places=12)
     assert_true(hype.axes_manager[1].units == 'm')
 
 
