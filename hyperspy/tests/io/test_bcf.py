@@ -72,7 +72,7 @@ def test_hyperspy_wrap():
     assert_true(hype.axes_manager[1].units == 'µm')
     assert_almost_equal(hype.axes_manager[2].scale, 0.010001)
     assert_almost_equal(hype.axes_manager[2].offset, -0.472397235)
-    assert_true(hype.axes_manager[2].units == 'eV')
+    assert_true(hype.axes_manager[2].units == 'keV')
 
 
 def test_hyperspy_wrap_downsampled():
