@@ -208,19 +208,6 @@ class BaseROI(t.HasTraits):
 
         return axes_out
 
-    @staticmethod
-    def _update_metadata_after_signal_axes_removal(signal):
-        am = signal.axes_manager
-        if am.signal_dimension == 2:
-            signal._record_by = "image"
-        elif am.signal_dimension == 1:
-            signal._record_by = "spectrum"
-        elif am.signal_dimension == 0:
-            signal._record_by = ""
-        else:
-            return
-        signal.metadata.Signal.record_by = signal._record_by
-
 
 def _get_mpl_ax(plot, axes):
     """
@@ -453,9 +440,6 @@ class BasePointROI(BaseInteractiveROI):
             axes = self._parse_axes(axes, signal.axes_manager)
         s = super(BasePointROI, self).__call__(signal=signal, out=out,
                                                axes=axes)
-        if out is None:
-            if any([not a.navigate for a in axes]):
-                self._update_metadata_after_signal_axes_removal(s)
         return s
 
 
@@ -1129,8 +1113,6 @@ class Line2DROI(BaseInteractiveROI):
                              metadata=signal.metadata.deepcopy().as_dictionary(),
                              original_metadata=signal.original_metadata.
                              deepcopy().as_dictionary())
-            if any([not a.navigate for a in axes]):
-                self._update_metadata_after_signal_axes_removal(roi)
             return roi
         else:
             out.data = profile
