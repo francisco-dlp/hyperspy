@@ -1025,7 +1025,8 @@ def bcf_imagery(obj_bcf):
               'General': {'original_filename': obj_bcf.filename.split('/')[-1],
                           'title': img.detector_name},
               'Sample': {'name': obj_bcf.header.name},
-              'Signal': {'signal_type': img.detector_name},
+              'Signal': {'signal_type': img.detector_name,
+                         'record_by': 'image'},
              }
            })
     return imagery_list
@@ -1081,7 +1082,8 @@ def bcf_hyperspectra(obj_bcf, index=0, downsample=None, cutoff_at_kV=None):
               'Sample': {'name': obj_bcf.header.name,
                          'elements': list(obj_bcf.header.elements),
                          'xray_lines': gen_elem_list(obj_bcf.header.elements)},
-              'Signal': {'signal_type': 'EDS_SEM'},
+              'Signal': {'signal_type': 'EDS_SEM',
+                         'record_by': 'spectrum'},
              }
            }]
     return hyperspectra
