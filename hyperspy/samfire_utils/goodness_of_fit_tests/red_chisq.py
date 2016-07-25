@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# Copyright 2007-2016 The HyperSpy developers
+# Copyright 2007-2011 The HyperSpy developers
 #
 # This file is part of  HyperSpy.
 #
@@ -16,10 +16,22 @@
 # You should have received a copy of the GNU General Public License
 # along with  HyperSpy.  If not, see <http://www.gnu.org/licenses/>.
 
+import numpy as np
 
-from hyperspy._signals.signal1d import Signal1D
-from hyperspy._signals.simulation import Simulation
+from hyperspy.samfire_utils.goodness_of_fit_tests.test_general import goodness_test
 
 
-class SpectrumSimulation(Simulation, Signal1D):
-    pass
+class red_chisq_test(goodness_test):
+
+    def __init__(self, tolerance):
+        self.name = 'Reduced chi-squared test'
+        self.expected = 1.0
+        self.tolerance = tolerance
+
+    def test(self, model, ind):
+        return np.abs(
+            model.red_chisq.data[ind] - self.expected) < self.tolerance
+
+    def map(self, model, mask):
+        ans = np.abs(model.red_chisq.data - self.expected) < self.tolerance
+        return np.logical_and(mask, ans)

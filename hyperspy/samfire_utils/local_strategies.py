@@ -16,19 +16,24 @@
 # You should have received a copy of the GNU General Public License
 # along with  HyperSpy.  If not, see <http://www.gnu.org/licenses/>.
 
+import numpy as np
 
-from scipy.interpolate import splev
+from hyperspy.samfire_utils.strategy import LocalStrategy
+from hyperspy.samfire_utils.weights.red_chisq import ReducedChiSquaredWeight
 
-from hyperspy.component import Component
+
+def exp_decay(distances):
+    """Exponential decay function."""
+    return np.exp(-distances)
 
 
-class Spline(Component):
+class ReducedChiSquaredStrategy(LocalStrategy):
+    """Reduced chi-squared Local strategy of the SAMFire. Uses reduced
+    chi-squared as the weight, and exponential decay as the decay function.
+    """
 
-    def __init__(self, tck):
-        Component.__init__(self, ('c', 'dump'))
-        self._whitelist['tck'] = ('init', tck)
-        self.t, self.c.value, self.k = tck
-        self.dump.free = False
-
-    def function(self, x):
-        return splev(x, (self.t, self.c.value, 3))
+    def __init__(self):
+        super().__init__('Reduced chi squared strategy')
+        self.weight = ReducedChiSquaredWeight()
+        self.radii = 3.
+        self.decay_function = exp_decay
