@@ -431,7 +431,6 @@ class Model1D(BaseModel):
         self.channel_switches[:] = True
         self.update_plot()
 
-
     def _function4odr(self, param, x):
         return self._model_function(param)
 
