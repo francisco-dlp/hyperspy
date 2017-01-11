@@ -847,6 +847,70 @@ class BaseModel(list):
         else:
             return [0, self._jacobian(p, y).T]
 
+    def _jacobian(self, param, y, weights=None):
+        if weights is None:
+            weights = 1.
+        if self.convolved is True:
+            counter = 0
+            grad = np.zeros(len(self.axis.axis))
+            for component in self:  # Cut the parameters list
+                if component.active:
+                    component.fetch_values_from_array(
+                        param[
+                            counter:counter +
+                            component._nfree_param],
+                        onlyfree=True)
+                    if component.convolved:
+                        for parameter in component.free_parameters:
+                            par_grad = np.convolve(
+                                parameter.grad(self.convolution_axis),
+                                self.low_loss(self.axes_manager),
+                                mode="valid")
+                            if parameter._twins:
+                                for par in parameter._twins:
+                                    np.add(par_grad, np.convolve(
+                                        par.grad(
+                                            self.convolution_axis),
+                                        self.low_loss(self.axes_manager),
+                                        mode="valid"), par_grad)
+                            grad = np.vstack((grad, par_grad))
+                    else:
+                        for parameter in component.free_parameters:
+                            par_grad = parameter.grad(self.axis.axis)
+                            if parameter._twins:
+                                for par in parameter._twins:
+                                    np.add(par_grad, par.grad(
+                                        self.axis.axis), par_grad)
+                            grad = np.vstack((grad, par_grad))
+                    counter += component._nfree_param
+            to_return = grad[1:, self.channel_switches] * weights
+        else:
+            # axis = self.axis.axis[self.channel_switches]
+            counter = 0
+            grad = False
+            for component in self:  # Cut the parameters list
+                if component.active:
+                    component.fetch_values_from_array(
+                        param[
+                            counter:counter +
+                            component._nfree_param],
+                        onlyfree=True)
+                    for parameter in component.free_parameters:
+                        par_grad = parameter.grad(self.xaxis, self.yaxis)
+                        if parameter._twins:
+                            for par in parameter._twins:
+                                np.add(par_grad, par.grad(
+                                    self.xaxis, self.yaxis), par_grad)
+                        if grad is not False:
+                            grad = np.vstack((grad, par_grad.ravel()))
+                        else:
+                            grad = par_grad.ravel()
+                    counter += component._nfree_param
+            to_return = grad * weights
+        if self.signal.metadata.Signal.binned is True:
+            to_return *= self.signal.axes_manager[-1].scale
+        return to_return
+
     def _calculate_chisq(self):
         if self.signal.metadata.has_item('Signal.Noise_properties.variance'):
 
@@ -1000,7 +1064,7 @@ class BaseModel(list):
             else:
                 approx_grad = False
                 jacobian = self._jacobian
-                odr_jacobian = self._jacobian4odr
+                # odr_jacobian = self._jacobian4odr
                 grad_ml = self._gradient_ml
                 grad_ls = self._gradient_ls
 

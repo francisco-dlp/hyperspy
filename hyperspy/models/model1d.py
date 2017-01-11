@@ -431,66 +431,6 @@ class Model1D(BaseModel):
         self.channel_switches[:] = True
         self.update_plot()
 
-    def _jacobian(self, param, y, weights=None):
-        if weights is None:
-            weights = 1.
-        if self.convolved is True:
-            counter = 0
-            grad = np.zeros(len(self.axis.axis))
-            for component in self:  # Cut the parameters list
-                if component.active:
-                    component.fetch_values_from_array(
-                        param[
-                            counter:counter +
-                            component._nfree_param],
-                        onlyfree=True)
-                    if component.convolved:
-                        for parameter in component.free_parameters:
-                            par_grad = np.convolve(
-                                parameter.grad(self.convolution_axis),
-                                self.low_loss(self.axes_manager),
-                                mode="valid")
-                            if parameter._twins:
-                                for par in parameter._twins:
-                                    np.add(par_grad, np.convolve(
-                                        par.grad(
-                                            self.convolution_axis),
-                                        self.low_loss(self.axes_manager),
-                                        mode="valid"), par_grad)
-                            grad = np.vstack((grad, par_grad))
-                    else:
-                        for parameter in component.free_parameters:
-                            par_grad = parameter.grad(self.axis.axis)
-                            if parameter._twins:
-                                for par in parameter._twins:
-                                    np.add(par_grad, par.grad(
-                                        self.axis.axis), par_grad)
-                            grad = np.vstack((grad, par_grad))
-                    counter += component._nfree_param
-            to_return = grad[1:, self.channel_switches] * weights
-        else:
-            axis = self.axis.axis[self.channel_switches]
-            counter = 0
-            grad = axis
-            for component in self:  # Cut the parameters list
-                if component.active:
-                    component.fetch_values_from_array(
-                        param[
-                            counter:counter +
-                            component._nfree_param],
-                        onlyfree=True)
-                    for parameter in component.free_parameters:
-                        par_grad = parameter.grad(axis)
-                        if parameter._twins:
-                            for par in parameter._twins:
-                                np.add(par_grad, par.grad(
-                                    axis), par_grad)
-                        grad = np.vstack((grad, par_grad))
-                    counter += component._nfree_param
-            to_return = grad[1:, :] * weights
-        if self.signal.metadata.Signal.binned is True:
-            to_return *= self.signal.axes_manager[-1].scale
-        return to_return
 
     def _function4odr(self, param, x):
         return self._model_function(param)

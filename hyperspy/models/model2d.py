@@ -199,9 +199,6 @@ class Model2D(BaseModel):
     def reset_the_signal_range(self):
         raise NotImplementedError
 
-    def _jacobian(self, param, y, weights=None):
-        raise NotImplementedError
-
     def _poisson_likelihood_function(self, param, y, weights=None):
         raise NotImplementedError
 
