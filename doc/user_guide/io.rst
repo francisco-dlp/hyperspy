@@ -287,6 +287,11 @@ partly support FEI's custom header. We do not provide writing features for this
 format, but, as it is an an open format, we may implement this feature in the
 future on demand.
 
+For mrc files ``load`` takes the ``mmap_mode`` keyword argument enabling
+loading the file using a different mode (default is copy-on-write) . However,
+note that lazy loading does not support in-place writring (i.e lazy loading and
+the "r+" mode are incompatible).
+
 .. _msa-format:
 
 EMSA/MSA
@@ -340,6 +345,12 @@ using the encoding argument, e.g.:
 .. code-block:: python
 
     >>> s.save('file.rpl', encoding = 'utf8')
+
+
+For mrc files ``load`` takes the ``mmap_mode`` keyword argument enabling
+loading the file using a different mode (default is copy-on-write) . However,
+note that lazy loading does not support in-place writring (i.e lazy loading and
+the "r+" mode are incompatible).
 
 .. _image-format:
 
@@ -494,7 +505,11 @@ in range 0-255).
 
 Blockfiles are by default loaded in a "copy-on-write" manner using
 `numpy.memmap
-<http://docs.scipy.org/doc/numpy/reference/generated/numpy.memmap.html>`_ .
+<http://docs.scipy.org/doc/numpy/referen-ce/generated/numpy.memmap.html>`_ .
+For blockfiles ``load`` takes the ``mmap_mode`` keyword argument enabling
+loading the file using a different mode. However, note that lazy loading
+does not support in-place writring (i.e lazy loading and the "r+" mode
+are incompatible).
 
 .. _dens-format:
 
