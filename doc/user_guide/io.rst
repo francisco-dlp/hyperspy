@@ -60,9 +60,10 @@ using the :py:meth:`~.misc.utils.DictionaryTreeBrowser.export` method, e.g.:
 
     >>> s.original_metadata.export('parameters')
 
-All file readers support accessing the data without reading it to memory. This
-feature can be useful when analysing large files. To load a file without loading
-it to memory simply set ``lazy`` to ``True`` e.g.:
+Almost all file readers support accessing the data without reading it to memory
+(see :ref:`supported-formats` for a list). This feature can be useful when
+analysing large files. To load a file without loading it to memory simply set
+``lazy`` to ``True`` e.g.:
 
 .. code-block:: python
 
@@ -145,48 +146,48 @@ Supported formats
 =================
 
 Here is a summary of the different formats that are currently supported by
-HyperSpy.
+HyperSpy. The "lazy" column specifies if lazy evaluation is supported.
 
 
 .. table:: Supported file formats
 
-    +--------------------+--------+--------+--------+----------------+
-    | Format             | Read   | Write  | lazy   | load_to_memory |
-    +====================+========+========+========+================+
-    | Gatan's dm3        |    Yes |    No  |    Yes |    No          |
-    +--------------------+--------+--------+--------+----------------+
-    | Gatan's dm4        |    Yes |    No  |    Yes |    No          |
-    +--------------------+--------+--------+--------+----------------+
-    | FEI's emi and ser  |    Yes |    No  |    Yes |    No          |
-    +--------------------+--------+--------+--------+----------------+
-    | HDF5               |    Yes |    Yes |    Yes |    Yes         |
-    +--------------------+--------+--------+--------+----------------+
-    | Image: jpg..       |    Yes |    Yes |    Yes |    No          |
-    +--------------------+--------+--------+--------+----------------+
-    | TIFF               |    Yes |    Yes |    Yes |    No          |
-    +--------------------+--------+--------+--------+----------------+
-    | MRC                |    Yes |    No  |    Yes |    No          |
-    +--------------------+--------+--------+--------+----------------+
-    | EMSA/MSA           |    Yes |    Yes |    No  |    No          |
-    +--------------------+--------+--------+--------+----------------+
-    | NetCDF             |    Yes |    No  |    No  |    No          |
-    +--------------------+--------+--------+--------+----------------+
-    | Ripple             |    Yes |    Yes |    Yes |    No          |
-    +--------------------+--------+--------+--------+----------------+
-    | SEMPER unf         |    Yes |    Yes |    Yes |    No          |
-    +--------------------+--------+--------+--------+----------------+
-    | Blockfile          |    Yes |    Yes |    Yes |    Yes         |
-    +--------------------+--------+--------+--------+----------------+
-    | DENS heater log    |    Yes |    No  |    No  |    No          |
-    +--------------------+--------+--------+--------+----------------+
-    | Bruker's bcf       |    Yes |    No  |    Yes |    No          |
-    +--------------------+--------+--------+--------+----------------+
-    | EMD (Berkley Labs) |    Yes |    Yes |    Yes |    Yes         |
-    +--------------------+--------+--------+--------+----------------+
-    | Protochips log     |    Yes |    No  |    No  |    No          |
-    +--------------------+--------+--------+--------+----------------+
-    | EDAX .spc and .spd |    Yes |    No  |    Yes |    No          |
-    +--------------------+--------+--------+--------+----------------+
+    +--------------------+--------+--------+--------+
+    | Format             | Read   | Write  | lazy   |
+    +====================+========+========+========+
+    | Gatan's dm3        |    Yes |    No  |    Yes |
+    +--------------------+--------+--------+--------+
+    | Gatan's dm4        |    Yes |    No  |    Yes |
+    +--------------------+--------+--------+--------+
+    | FEI's emi and ser  |    Yes |    No  |    Yes |
+    +--------------------+--------+--------+--------+
+    | HDF5               |    Yes |    Yes |    Yes |
+    +--------------------+--------+--------+--------+
+    | Image: jpg..       |    Yes |    Yes |    Yes |
+    +--------------------+--------+--------+--------+
+    | TIFF               |    Yes |    Yes |    Yes |
+    +--------------------+--------+--------+--------+
+    | MRC                |    Yes |    No  |    Yes |
+    +--------------------+--------+--------+--------+
+    | EMSA/MSA           |    Yes |    Yes |    No  |
+    +--------------------+--------+--------+--------+
+    | NetCDF             |    Yes |    No  |    No  |
+    +--------------------+--------+--------+--------+
+    | Ripple             |    Yes |    Yes |    Yes |
+    +--------------------+--------+--------+--------+
+    | SEMPER unf         |    Yes |    Yes |    Yes |
+    +--------------------+--------+--------+--------+
+    | Blockfile          |    Yes |    Yes |    Yes |
+    +--------------------+--------+--------+--------+
+    | DENS heater log    |    Yes |    No  |    No  |
+    +--------------------+--------+--------+--------+
+    | Bruker's bcf       |    Yes |    No  |    Yes |
+    +--------------------+--------+--------+--------+
+    | EMD (Berkley Labs) |    Yes |    Yes |    Yes |
+    +--------------------+--------+--------+--------+
+    | Protochips log     |    Yes |    No  |    No  |
+    +--------------------+--------+--------+--------+
+    | EDAX .spc and .spd |    Yes |    No  |    Yes |
+    +--------------------+--------+--------+--------+
 
 .. _hdf5-format:
 
