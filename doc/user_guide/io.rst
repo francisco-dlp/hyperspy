@@ -60,6 +60,16 @@ using the :py:meth:`~.misc.utils.DictionaryTreeBrowser.export` method, e.g.:
 
     >>> s.original_metadata.export('parameters')
 
+.. _load_to_memory-label:
+
+.. deprecated:: 1.2
+   ``memmap_dir`` and ``load_to_memory`` :py:func:`~.io.load` keyword arguments.
+   Use ``lazy`` instead of ``load_to_memory``. ``lazy`` makes ``memmap_dir``
+   unnecessary.
+
+.. versionadd: 1.2
+   ``lazy`` keyword argument.
+
 Almost all file readers support accessing the data without reading it to memory
 (see :ref:`supported-formats` for a list). This feature can be useful when
 analysing large files. To load a file without loading it to memory simply set
@@ -69,7 +79,7 @@ analysing large files. To load a file without loading it to memory simply set
 
     >>> s = hs.load("filename.hdf5", lazy=True)
 
-More details on lazy operation in :ref:`big-data-label`.
+More details on lazy evaluation support in :ref:`big-data-label`.
 
 
 Loading multiple files
