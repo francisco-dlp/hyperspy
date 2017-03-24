@@ -21,8 +21,10 @@ import math
 import numpy as np
 
 from hyperspy.component import Component
+from hyperspy.misc.registers import register_component1d
 
 
+@register_component1d
 class PowerLaw(Component):
 
     """Power law component

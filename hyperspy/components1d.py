@@ -43,7 +43,7 @@ from hyperspy._components.gaussianhf import GaussianHF
 from hyperspy._components.logistic import Logistic
 from hyperspy._components.lorentzian import Lorentzian
 from hyperspy._components.offset import Offset
-from hyperspy._components.power_law import PowerLaw
+# from hyperspy._components.power_law import PowerLaw
 from hyperspy._components.pes_see import SEE
 from hyperspy._components.rc import RC
 from hyperspy._components.eels_vignetting import Vignetting
