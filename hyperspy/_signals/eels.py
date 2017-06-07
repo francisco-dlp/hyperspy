@@ -808,12 +808,13 @@ class EELSSpectrum_mixin:
         self._check_signal_dimension_equals_one()
         psf_size = psf.axes_manager.signal_axes[0].size
         kernel = psf()
-        imax = kernel.argmax()
         maxval = self.axes_manager.navigation_size
         show_progressbar = show_progressbar and (maxval > 0)
+        if psf.axes_manager.navigation_size <= 1:
+            # Single spectrum psf
+            psf = psf()
 
-        def deconv_function(signal, kernel=None,
-                            iterations=15, psf_size=None):
+        def deconv_function(signal, kernel, psf_size, iterations=15, ):
             imax = kernel.argmax()
             result = np.array(signal).copy()
             mimax = psf_size - 1 - imax
