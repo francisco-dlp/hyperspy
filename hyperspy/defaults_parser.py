@@ -139,23 +139,22 @@ class GUIs(t.HasTraits):
         desc="Display warnings, if hyperspy_gui_ipywidgets or hyperspy_gui_traitsui are missing.")
 
 
-
 class PlotConfig(t.HasTraits):
     dim0_increase = t.Str('right',
-        #desc="Hotkey for increasing index in dimension 0"
-    )
+                          #desc="Hotkey for increasing index in dimension 0"
+                          )
     dim0_decrease = t.Str('left',
-        #desc="Hotkey for increasing index in dimension 0"
-    )
+                          #desc="Hotkey for increasing index in dimension 0"
+                          )
     dim1_increase = t.Str('down',
-        #desc="Hotkey for increasing index in dimension 0"
-    )
+                          #desc="Hotkey for increasing index in dimension 0"
+                          )
     dim1_decrease = t.Str('up',
-        #desc="Hotkey for increasing index in dimension 0"
-    )
-    dim_modifier0 = t.Enum(['ctrl', 'alt', 'shift']) # 0 elem is default
-    dim_modifier1 = t.Enum(['shift', 'alt', 'ctrl']) # 0 elem is default
-    dim_modifier2 = t.Enum(['alt', 'ctrl', 'shift']) # 0 elem is default
+                          #desc="Hotkey for increasing index in dimension 0"
+                          )
+    dim_modifier0 = t.Enum(['ctrl', 'alt', 'shift'])  # 0 elem is default
+    dim_modifier1 = t.Enum(['shift', 'alt', 'ctrl'])  # 0 elem is default
+    dim_modifier2 = t.Enum(['alt', 'ctrl', 'shift'])  # 0 elem is default
 
 
 class EDSConfig(t.HasTraits):
@@ -220,6 +219,7 @@ def dictionary_from_template(template):
         dictionary[section] = traited_class.get()
     return dictionary
 
+
 config = configparser.ConfigParser(allow_no_value=True)
 template2config(template, config)
 rewrite = False
@@ -261,6 +261,7 @@ class Preferences(t.HasTraits):
         config = configparser.ConfigParser(allow_no_value=True)
         template2config(template, config)
         config.write(open(defaults_file, 'w'))
+
 
 preferences = Preferences(
     EELS=template['EELS'],
