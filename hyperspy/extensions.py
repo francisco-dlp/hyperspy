@@ -4,8 +4,9 @@ import yaml
 import os
 import importlib
 import copy
+import sys
+import glob
 
-import hyperspy.misc.config_dir
 
 _logger = logging.getLogger(__name__)
 
@@ -18,12 +19,16 @@ with open(_ext_f, 'r') as stream:
 # import unless needed
 ALL_EXTENSIONS = copy.deepcopy(EXTENSIONS)
 
-_external_exts_f = os.path.join(
-    hyperspy.misc.config_dir.config_path,
-    "hspy_extensions.yaml")
 
-if os.path.isfile(_external_exts_f):
-    with open(_external_exts_f, 'r') as stream:
+_external_exts_dir = os.path.join(
+    sys.prefix,
+    'hyperspy_extension_config')
+
+hyperspy_extension_file_list = glob.glob(
+        os.path.join(_external_exts_dir, 'hyperspy_extension_*.yaml'))
+
+for file in hyperspy_extension_file_list:
+    with open(file, 'r') as stream:
         external_exts = yaml.safe_load(stream)
         for ext_ext_mod in external_exts:
             _logger.info("Loading extension %s" % ext_ext_mod)
