@@ -29,24 +29,24 @@ class SplitVoigt(Component):
 
     .. math::
 
-    pV(x,centre,\sigma) = (1 - \eta) G(x,centre,\sigma)
-    + \eta L(x,centre,\sigma)
+        pV(x,centre,\sigma) = (1 - \eta) G(x,centre,\sigma)
+        + \eta L(x,centre,\sigma)
 
-    f(x) =
-    \begin{cases}
-        pV(x,centre,\sigma{1}), & x \leq centre\\
-        pV(x,centre,\sigma{2}), & x >  centre}
-    \end{cases}
+        f(x) =
+        \begin{cases}
+        pV(x,centre,\sigma_{1}) & x \leq centre\\
+        pV(x,centre,\sigma_{2}) & x > centre\\
+        \end{cases}
 
     ================ ===========
     Variable          Parameter
     ================ ===========
     :math:`A`         A
     :math:`\eta`      fraction
-    :math:`\sigma{1}` sigma1
-    :math:`\sigma{2}` sigma2
+    :math:`\sigma_1` sigma1
+    :math:`\sigma_2` sigma2
     :math:`centre`    centre
-    =============== ===========
+    ================ ===========
 
     Notes
     -----
