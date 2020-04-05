@@ -27,17 +27,17 @@ class Doniach(Expression):
 
     .. math::
 
-        f(x) = \frac{cos[ \frac{{\pi\alpha}}{2}+
-        (1-\alpha)tan^{-1}(\frac{x-centre}{\sigma})]}
+        f(x) = \frac{\cos[ \frac{{\pi\alpha}}{2}+
+        (1-\alpha)\tan^{-1}(\frac{x-centre}{\sigma})]}
         {(\sigma^2 + (x-centre)^2)^{\frac{(1-\alpha)}{2}}}
 
     =============== ===========
     Variable         Parameter
     =============== ===========
-    :math: `A`       A
-    :math: `\sigma`  sigma
-    :math: `\alpha`  alpha
-    :math: `centre`  centre
+    :math:`A`       A
+    :math:`\sigma`  sigma
+    :math:`\alpha`  alpha
+    :math:`centre`  centre
     =============== ===========
 
     Notes
