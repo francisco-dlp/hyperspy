@@ -1853,8 +1853,10 @@ class MVA:
         plt.draw()
         return ax
 
-    def _create_cluster_centers_from_labels(self, labels,
+    def _create_cluster_centers_from_labels(self, alg,
                                            source_for_centers,
+                                           scaled_data,
+                                           center_signals_method="mean",
                                            number_of_components=None,
                                            navigation_mask=None):
         """From a set of cluster labels generate the cluster centers from the
@@ -1893,7 +1895,7 @@ class MVA:
         
         """
 
-
+        labels = alg.labels_
         # now re-organize the labels to fit with hyperspy loadings/factors
         # and use the kmeans centers to extract real data cluster centers
         # create an array to store the centers
@@ -1906,37 +1908,35 @@ class MVA:
         # by averaging all points with a given label or averaging
         # PCA components*loadings with a given label
         #
-        clustersizes = np.zeros((n_clusters,), dtype=np.int)
-        for i in range(n_clusters):
-            clustersizes[i] = labels[np.where(labels == i)].shape[0]
+        clustersizes = np.asarray([(labels == i).sum() for i in range(n_clusters)], dtype="int")
         # this sorts the labels based on clustersize for high to low
         # i.e. point with least number of points first
         # Set the pixels that were not processed to nan
-            
-        idx = np.argsort(clustersizes)[::-1]
-        lut = np.zeros_like(idx)
-        lut[idx] = np.arange(n_clusters)
-        sorted_labels = lut[labels]
         
-        shape = (n_clusters,self.axes_manager.navigation_size)
-        cluster_labels = np.full(shape, -1)
+        idx = np.argsort(clustersizes)[::-1]
+        shape = (n_clusters, self.axes_manager.navigation_size)
+        cluster_labels = np.zeros(shape, dtype="bool")
         sorted_labels = np.full((self.axes_manager.navigation_size),-1)
         # now create the labels from these sorted labels
         nav_mask = self._mask_for_clustering(navigation_mask)
-        sorted_labels[nav_mask] = lut[labels]
-
+        sorted_labels[nav_mask] = idx[labels]
         cluster_centers=[]
         for i in range(n_clusters):
+            cluster_labels[i, sorted_labels == i] = True
+            if center_signals_method == "mean":
+                navigation_mask = ~cluster_labels[i]
+            elif center_signals_method == "closest":
+                distance = np.linalg.norm(scaled_data - alg.cluster_centers_[idx[i], :], axis=1)
+                navigation_mask = np.array([distance.argmin()])
+            else:
+                raise ValueError(f'`center_signals_method` must be "closest" or "mean" but {center_signals_method} given')
 
-            cluster_labels[i, :] = \
-                np.where(sorted_labels == i, 1, 0)
-            clus_index = sorted_labels != i                
-            cluster_data,nav_mask,sig_mask = \
+            cluster_data, nav_mask,sig_mask = \
                 self._get_cluster_signal(source_for_centers,
-                                         number_of_components,
-                                         navigation_mask=clus_index,
-                                         signal_mask=None,
-                                         sum_over_navigation_mask=True)
+                                        number_of_components,
+                                        navigation_mask=navigation_mask,
+                                        signal_mask=None,
+                                        sum_over_navigation_mask=True)
             # the size of cluster centers depends on the data source used
             # so append to list and concatentate to array at end 
             cluster_centers.append(cluster_data)
@@ -2021,7 +2021,7 @@ class MVA:
 
             
         navigation_mask = self._mask_for_clustering(navigation_mask)
-        if not isinstance(navigation_mask,slice):
+        if not isinstance(navigation_mask,slice) and navigation_mask.size != 1:
             if navigation_mask.size != self.axes_manager.navigation_size:
                 raise ValueError("Navigation mask size does not match signal navigation size")
 
@@ -2054,7 +2054,7 @@ class MVA:
                 toreturn = loadings[:,:number_of_components] 
             else:
                 toreturn = factors[:, :number_of_components] \
-                    @ loadings[navigation_mask, :number_of_components].mean(axis=0).T          
+                    @ loadings[navigation_mask, :number_of_components].mean(axis=0).T
         return toreturn, navigation_mask, signal_mask
 
     def is_hyperspy_signal(self,input_object):
@@ -2087,6 +2087,7 @@ class MVA:
                          signal_mask=None,
                          algorithm='kmeans',
                          return_info=False,
+                         center_signals_method="mean",
                          **kwargs):
         """Cluster analysis of a signal or decomposition results of a signal
         Results are stored in `learning_results`.
@@ -2148,6 +2149,11 @@ class MVA:
             the cluster class used  contain a number of attributes.
             If True (the default is False)
             return the cluster object so the attributes can be accessed.
+        center_signals_method: {"closest", "mean"}
+            If "closest", the center signals are the individual signals from `source_for_centers`
+            closest to the center of each cluster. If "mean", the centers
+            signals are the average of the `source_for_centers` signals over all
+            the members of each cluster.
         **kwargs : dict  optional, default - empty
             Additional parameters passed to the clustering algorithm.
             For example, in case of the "kmeans" algorithm, `n_init` can be
@@ -2215,20 +2221,18 @@ class MVA:
             if return_info:
                 to_return = alg
 
-            labels = alg.labels_
-
-
             # now re-organize the labels to fit with hyperspy loadings/factors
             # and use the kmeans centers to extract real data cluster centers
             # create an array to store the centers
  
-            sorted_membership,cluster_labels, cluster_centers =\
+            sorted_membership, cluster_labels, cluster_centers =\
                 self._create_cluster_centers_from_labels(
-                    labels,
+                    alg,
+                    scaled_data=scaled_data,
                     source_for_centers=source_for_centers,
                     number_of_components=number_of_components,
-                    navigation_mask=navigation_mask)
-                
+                    navigation_mask=navigation_mask,
+                    center_signals_method=center_signals_method)
 
             # if an object is passed as the clustering algorithm
             # the number of clusters may vary...
