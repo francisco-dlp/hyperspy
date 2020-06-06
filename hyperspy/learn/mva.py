@@ -1927,7 +1927,7 @@ class MVA:
                 navigation_mask = ~cluster_labels[i]
             elif center_signals_method == "closest":
                 distance = np.linalg.norm(scaled_data - alg.cluster_centers_[idx[i], :], axis=1)
-                navigation_mask = np.array([distance.argmin()])
+                navigation_mask = ~np.array([distance.argmin()])
             else:
                 raise ValueError(f'`center_signals_method` must be "closest" or "mean" but {center_signals_method} given')
 
