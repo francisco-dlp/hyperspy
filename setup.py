@@ -359,7 +359,6 @@ with update_version_when_dev() as version:
             ],
         },
         author=Release.authors['all'][0],
-        author_email=Release.authors['all'][1],
         description=Release.description,
         long_description=open('README.rst').read(),
         license=Release.license,
