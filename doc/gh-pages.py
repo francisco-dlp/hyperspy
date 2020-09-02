@@ -84,7 +84,7 @@ if __name__ == '__main__':
     try:
         tag = sys.argv[1]
     except IndexError:
-        tag = "dev"
+        tag = "current"
 
     startdir = os.getcwd()
     if not os.path.exists(pages_dir):
