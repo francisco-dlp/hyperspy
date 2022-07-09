@@ -20,11 +20,8 @@ from datetime import datetime as dt
 import codecs
 import os
 import logging
-from pydoc import doc
-from turtle import dot
 
 import numpy as np
-from traits.api import Undefined
 
 from rsciio.version import __version__
 from rsciio.utils.tools import DTBox
@@ -209,7 +206,7 @@ def parse_msa_string(string, filename=None):
                 error = f"The {parameter} keyword value, {value} could \
                     not be converted to the right type."
                 if 'e' in value.lower():
-                    # Normally, the offending misspelling is a space in the 
+                    # Normally, the offending misspelling is a space in the
                     # scientific notation, e.g. 2.0 E-06
                     try:
                         parameters[parameter] = type_(value.replace(' ', ''))
@@ -317,6 +314,15 @@ def file_writer(filename, signal, format=None, separator=', ',
                 encoding='latin-1'):
     loc_kwds = {}
     FORMAT = "EMSA/MAS Spectral Data File"
+    # Keep support for passing hyperspy signal until hyperspy 2.0 is released
+    if not isinstance(signal, dict):
+        try:
+            signal = signal._to_dictionary()
+        except Exception:
+            raise ValueError(
+                "The argument `signal` must be a dictionary or a hyperspy signal."
+                )
+
     md = DTBox(signal["metadata"], box_dots=True)
     if signal["original_metadata"].get("FORMAT", None) == FORMAT:
         loc_kwds = signal["original_metadata"]
@@ -333,7 +339,7 @@ def file_writer(filename, signal, format=None, separator=', ',
             date_str = date.strftime("%d-%m-%Y")
             day, month, year = date_str.split("-")
             month = US_MONTHS_D2A[month]
-            loc_kwds['DATE'] = "-".join((day, month, year)) 
+            loc_kwds['DATE'] = "-".join((day, month, year))
         if "General.item" in md:
             time = dt.strptime(md.General.time, "%H:%M:%S")
             loc_kwds['TIME'] = time.strftime("%H:%M")

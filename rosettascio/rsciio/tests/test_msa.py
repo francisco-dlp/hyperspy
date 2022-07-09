@@ -2,9 +2,12 @@ import copy
 import os.path
 import tempfile
 
-from hyperspy.io import load
+import hyperspy.api as hs
 from hyperspy.misc.test_utils import assert_deep_almost_equal
 from hyperspy import __version__ as hs_version
+
+from rsciio.msa.api import file_writer
+
 
 my_path = os.path.dirname(__file__)
 
@@ -169,7 +172,7 @@ example2_parameters = {
 class TestExample1:
 
     def setup_method(self, method):
-        self.s = load(os.path.join(
+        self.s = hs.load(os.path.join(
             my_path,
             "msa_files",
             "example1.msa"))
@@ -213,7 +216,7 @@ class TestExample1:
         with tempfile.TemporaryDirectory() as tmpdir:
             fname2 = os.path.join(tmpdir, "example1-export.msa")
             self.s.save(fname2)
-            s2 = load(fname2)
+            s2 = hs.load(fname2)
             # delete timestamp from metadata since it's runtime dependent
             del s2.metadata.General.FileIO.Number_0.timestamp
             del self.s.metadata.General.FileIO.Number_1
@@ -228,7 +231,7 @@ class TestExample1:
 class TestExample1WrongDate:
 
     def setup_method(self, method):
-        self.s = load(os.path.join(
+        self.s = hs.load(os.path.join(
             my_path,
             "msa_files",
             "example1_wrong_date.msa"))
@@ -244,12 +247,10 @@ class TestExample1WrongDate:
                                  md)
 
 
-
-
 class TestExample2:
 
     def setup_method(self, method):
-        self.s = load(os.path.join(
+        self.s = hs.load(os.path.join(
             my_path,
             "msa_files",
             "example2.msa"))
@@ -352,7 +353,7 @@ class TestExample2:
         with tempfile.TemporaryDirectory() as tmpdir:
             fname2 = os.path.join(tmpdir, "example2-export.msa")
             self.s.save(fname2)
-            s2 = load(fname2)
+            s2 = hs.load(fname2)
             assert (s2.metadata.General.original_filename ==
                     "example2-export.msa")
             s2.metadata.General.original_filename = "example2.msa"
@@ -364,5 +365,11 @@ class TestExample2:
 
 
 def test_minimum_metadata_example():
-    s = load(os.path.join(my_path, "msa_files", "minimum_metadata.msa"))
+    s = hs.load(os.path.join(my_path, "msa_files", "minimum_metadata.msa"))
     assert minimum_md_om == s.original_metadata.as_dictionary()
+
+
+def test_file_writer_hs_signal(tmp_path):
+    fname = tmp_path / 'test_file.prz'
+    s = hs.signals.Signal1D([0, 1, 2])
+    file_writer(fname, s)
