@@ -24,7 +24,7 @@ import logging
 import numpy as np
 
 from rsciio.version import __version__
-from rsciio.utils.tools import DTBox
+from rsciio.utils.tools import DTBox, file_writer_parse_argument
 
 _logger = logging.getLogger(__name__)
 
@@ -307,22 +307,14 @@ def file_reader(filename, encoding='latin-1', **kwds):
             encoding=encoding,
             errors='replace') as spectrum_file:
         return parse_msa_string(string=spectrum_file,
-                                filename=filename)
+                               filename=filename)
 
 
+@file_writer_parse_argument()
 def file_writer(filename, signal, format=None, separator=', ',
                 encoding='latin-1'):
     loc_kwds = {}
     FORMAT = "EMSA/MAS Spectral Data File"
-    # Keep support for passing hyperspy signal until hyperspy 2.0 is released
-    if not isinstance(signal, dict):
-        try:
-            signal = signal._to_dictionary()
-        except Exception:
-            raise ValueError(
-                "The argument `signal` must be a dictionary or a hyperspy signal."
-                )
-
     md = DTBox(signal["metadata"], box_dots=True)
     if signal["original_metadata"].get("FORMAT", None) == FORMAT:
         loc_kwds = signal["original_metadata"]

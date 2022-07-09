@@ -22,7 +22,6 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 import os
 from collections import OrderedDict
-from collections.abc import Iterable, Mapping
 from contextlib import contextmanager
 
 import numpy as np
@@ -34,9 +33,29 @@ _UREG = UnitRegistry()
 
 _logger = logging.getLogger(__name__)
 
+
 @contextmanager
 def dummy_context_manager(*args, **kwargs):
     yield
+
+
+def file_writer_parse_argument():
+    def decorator(func):
+        def parse_argument(filename, signal, **kwargs):
+            # Keep support for passing hyperspy signal until hyperspy 2.0
+            # is released
+            if not isinstance(signal, dict):
+                try:
+                    signal = signal._to_dictionary()
+                except Exception:
+                    raise ValueError(
+                        "The argument `signal` must be a dictionary or a "
+                        "hyperspy signal."
+                        )
+            return func(filename, signal, **kwargs)
+        return parse_argument
+    return decorator
+
 
 def dump_dictionary(
     file, dic, string="root", node_separator=".", value_separator=" = "
@@ -111,7 +130,7 @@ def overwrite(fname):
 
     Returns
     -------
-    bool : 
+    bool :
         Whether to overwrite file.
 
     """
@@ -223,5 +242,3 @@ def dict2sarray(dictionary, sarray=None, dtype=None):
         else:
             sarray[name] = dictionary[name]
     return sarray
-
-
