@@ -32,6 +32,7 @@ from packaging.version import Version
 
 import dask.array as da
 import numpy as np
+from box import Box
 
 from hyperspy.misc.signal_tools import broadcast_signals
 from hyperspy.exceptions import VisibleDeprecationWarning
@@ -186,7 +187,42 @@ def slugify(value, valid_variable_name=False):
     return value
 
 
-class DictionaryTreeBrowser:
+class DictionaryTreeBrowser(Box):
+
+    def __init__(self, *args, **kwargs):
+        kwargs["box_dots"] = kwargs.get("box_dots", True)
+        super().__init__(*args, **kwargs)
+    def add_node(self, path):
+        keys = path.split(".")
+        for key in keys:
+            if self.get(key) is None:
+                self[key] = {}
+            self = self[key]
+
+    def set_item(self, path, value):
+        if self.get(path) is None:
+            self.add_node(path)
+        self[path] = value
+
+    def has_item(self, path):
+        return self.get(path) is not None
+    
+    def add_dictionary(self, dic):
+        self.update(dic)
+        
+    def get_item(self, name, default=""):
+        return self.get(name, default)
+        
+    def as_dictionary(self):
+        return self.to_dict()
+    
+    def deepcopy(self):
+        """Returns a deep copy using :py:func:`copy.deepcopy`."""
+        return copy.deepcopy(self)
+
+
+
+class _DictionaryTreeBrowser:
 
     """
     A class to comfortably browse a dictionary using a CLI.
