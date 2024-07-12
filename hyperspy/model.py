@@ -37,6 +37,7 @@ from scipy.optimize import (
     least_squares,
     leastsq,
     minimize,
+    nnls,
 )
 
 from hyperspy.component import Component
@@ -1256,6 +1257,16 @@ class BaseModel(list):
 
             result, residual, *_ = np.linalg.lstsq(
                 xp.asanyarray(comp_values.T), target_signal.T, **kw
+            )
+            coefficient_array = result.T
+        elif optimizer == "nnls":
+            if self.signal._lazy:
+                raise ValueError(
+                    "The `nnls` solver can't operate lazily, the "
+                    "`lstsq` solver can be used instead."
+                )
+            result, residual = nnls(
+                xp.asanyarray(comp_values.T), target_signal.T,
             )
             coefficient_array = result.T
 
