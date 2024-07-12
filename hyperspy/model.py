@@ -1266,7 +1266,7 @@ class BaseModel(list):
                     "`lstsq` solver can be used instead."
                 )
             result, residual = nnls(
-                xp.asanyarray(comp_values.T), target_signal.T,
+                np.asanyarray(comp_values.T), target_signal.T,
             )
             coefficient_array = result.T
 
@@ -1786,7 +1786,7 @@ class BaseModel(list):
                 self.p0 = self.fit_output.x
                 self.p_std = self.fit_output.perror
 
-            elif optimizer in ["lstsq", "ridge_regression"]:
+            elif optimizer in ["lstsq", "ridge_regression", "nnls"]:
                 # multifit pass this kwargs when necessary
                 only_current = kwargs.get("only_current", True)
                 # Errors are calculated when specifying calculate_errors=True
