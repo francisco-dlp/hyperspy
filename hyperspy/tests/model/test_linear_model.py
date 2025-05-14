@@ -904,3 +904,25 @@ def test_rank_lstsq_residual():
     m.extend([p, g, o])
     m.set_parameters_not_free(only_nonlinear=True)
     m.fit(optimizer="lstsq")
+
+
+def test_poisson_regression():
+    # Generate Poisson-distributed data: y = a*x + b, a=2, b=5
+    rng = np.random.default_rng(42)
+    x = np.arange(1, 100)
+    a_true, b_true = 2.0, 5.0
+    mu = a_true * x + b_true
+    y = rng.poisson(mu)
+    s = Signal1D(y)
+    m = s.create_model()
+    expr = Expression("a*x + b", name="line")
+    expr.a.value = 1.0
+    expr.b.value = 1.0
+    expr.a.free = True
+    expr.b.free = True
+    m.append(expr)
+    # Fit using Poisson regression
+    m.fit(optimizer="glm-poisson")
+    # Check that the fitted parameters are close to the true values
+    np.testing.assert_allclose(expr.a.value, a_true, rtol=0.1)
+    np.testing.assert_allclose(expr.b.value, b_true, rtol=0.2)

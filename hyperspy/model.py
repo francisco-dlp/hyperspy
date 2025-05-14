@@ -30,6 +30,7 @@ import dask
 import dask.array as da
 import numpy as np
 import scipy.odr as odr
+import statsmodels.api as sm  # Added for Poisson regression
 from dask.diagnostics import ProgressBar
 from packaging.version import Version
 from scipy.linalg import svd
@@ -1400,6 +1401,7 @@ class BaseModel(list):
               ``alpha`` controlling regularization strength can be passed
               as keyword argument, see :class:`sklearn.linear_model.Ridge`
               for more information.
+            * ``'glm-poisson'`` - Poisson regression using :class:`statsmodels.api.GLM` with Poisson family (for Poisson-distributed noise).
 
             Only 'lstsq' suppors lazy signals.
         calculate_errors : bool, default is False
@@ -1603,10 +1605,28 @@ class BaseModel(list):
             results = reg.fit(X=comp_values.T, y=target_signal.T)
             coefficient_array = results.coef_
             residual = None
+
+        elif optimizer == "glm-poisson":
+            # Poisson regression using statsmodels GLM
+            # Only supports dense (non-lazy) signals
+            if self.signal._lazy:
+                raise ValueError(
+                    "The optimizer 'glm-poisson' can't operate lazily, use the 'lstsq' optimizer instead."
+                )
+            # statsmodels expects (n_samples, n_features)
+            y = target_signal.T
+            X = sm.add_constant(comp_values.T)
+            model = sm.GLM(
+                y, X, family=sm.families.Poisson(link=sm.families.links.Identity())
+            )
+            result = model.fit()
+            coefficient_array = result.params
+            residual = None
+
         else:
             raise ValueError(
-                f"Optimizer `'{optimizer}'` not supported. "
-                "Use 'lstsq', 'ols', 'nnls' or 'ridge'."
+                "Optimizer `'{optimizer}'` not supported. "
+                "Use 'lstsq', 'ols', 'nnls', 'ridge', or 'poisson'."
             )
 
         fit_output = {"x": coefficient_array}
@@ -2106,7 +2126,14 @@ class BaseModel(list):
                 self.p0 = self.fit_output.x
                 self.p_std = self.fit_output.perror
 
-            elif optimizer in ["lstsq", "ols", "nnls", "ridge", "ridge_regression"]:
+            elif optimizer in [
+                "lstsq",
+                "glm-poisson",
+                "ols",
+                "nnls",
+                "ridge",
+                "ridge_regression",
+            ]:
                 # multifit pass this kwargs when necessary
                 only_current = kwargs.get("only_current", True)
                 # Errors are calculated when specifying calculate_errors=True
@@ -2454,7 +2481,7 @@ class BaseModel(list):
 
                                 if autosave and i % autosave_every == 0:
                                     self.save_parameters2file(autosave_fn)
-                # Trigger the indices_changed event to update to current indices,
+                # Trigger the indices_changed event to update to current indices
                 # since the callback was suppressed
                 self.axes_manager.events.indices_changed.trigger(self.axes_manager)
 
