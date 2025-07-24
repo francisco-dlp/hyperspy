@@ -229,10 +229,17 @@ class Offset(Component):
         For a constant function f(x) = k, the integral from a to b is k × (b - a).
         This is much faster and more accurate than numerical integration.
 
+        Supports both fixed and variable integration limits for navigation-aware
+        integration across multiple parameter sets.
+
         Parameters
         ----------
-        limits : tuple
-            Integration limits (a, b) where a and b are the lower and upper bounds.
+        limits : tuple, array-like, or tuple of array-like
+            Integration limits. Can be:
+
+            * (a, b) : Fixed limits for all navigation positions
+            * (a_array, b_array) : Variable limits with arrays matching navigation dimensions
+            * array of (a, b) tuples : Variable limits for each navigation position
         variable : str, default 'x'
             Integration variable (included for API compatibility).
         method : str, default 'analytical'
@@ -247,49 +254,87 @@ class Offset(Component):
 
         Returns
         -------
-        float
+        float or numpy.ndarray
             The analytical integration result: offset × (b - a).
+            Returns scalar for fixed limits, or array matching navigation dimensions
+            for variable limits.
 
         Examples
         --------
+        >>> import numpy as np
         >>> offset = hs.model.components1D.Offset(offset=5.0)
-        >>> # Standard integration using current parameter values
+        >>> # Standard fixed limits integration using current parameter values
         >>> result = offset.integrate((0, 2))
+        >>> # Variable limits integration
+        >>> a_vals = np.array([0, 1, 2])
+        >>> b_vals = np.array([2, 3, 4])
+        >>> results = offset.integrate((a_vals, b_vals))
         >>> # Integration with runtime parameter substitution
         >>> result = offset.integrate((0, 2), parameters_values=[7.0])
 
         Raises
         ------
         ValueError
-            If limits is not a tuple of length 2.
+            If limits format is invalid.
 
-        Examples
-        --------
-        >>> offset = hs.model.components1D.Offset(offset=5.0)
-        >>> result = offset.integrate((0, 3))  # Returns 15.0
-        >>> result = offset.integrate((-1, 2))  # Returns 15.0
-        >>>
-        >>> # Runtime parameter substitution
-        >>> result = offset.integrate((0, 3), parameters_values=[10.0])  # Returns 30.0
         %s
         """
-        if not isinstance(limits, tuple) or len(limits) != 2:
-            raise ValueError("limits must be a tuple of length 2: (a, b)")
+        import numpy as np
 
-        a, b = limits
+        # Check if we have variable limits
+        nav_shape = getattr(self, "_navigation_shape", None)
+        is_variable_limits, parsed_limits = self._parse_limits(limits, nav_shape)
 
-        # Use provided parameter values or current values
-        if parameters_values is None:
-            offset_value = self.offset.value
+        if is_variable_limits:
+            # Handle variable limits analytically
+            # Extract limits - could be (a_array, b_array) or array of (a,b) tuples
+            if isinstance(parsed_limits, tuple) and len(parsed_limits) == 2:
+                # Format: (a_array, b_array)
+                a_array, b_array = parsed_limits
+            else:
+                # Format: array of (a,b) tuples
+                limits_array = np.asarray(parsed_limits)
+                a_array = limits_array[..., 0]
+                b_array = limits_array[..., 1]
+
+            # Calculate interval lengths
+            interval_lengths = b_array - a_array
+
+            # Use provided parameter values or current values
+            if parameters_values is None:
+                offset_value = self.offset.value
+            else:
+                if len(parameters_values) != 1:
+                    raise ValueError(
+                        f"Expected 1 parameter value, got {len(parameters_values)}"
+                    )
+                offset_value = parameters_values[0]
+
+            # For constant function f(x) = k, integral from a to b is k * (b - a)
+            results = offset_value * interval_lengths
+            return results if results.size > 1 else results.item()
+
         else:
-            if len(parameters_values) != 1:
+            # Handle fixed limits (original logic)
+            if not isinstance(limits, tuple) or len(limits) != 2:
                 raise ValueError(
-                    f"Expected 1 parameter value, got {len(parameters_values)}"
+                    "For fixed limits, must be a tuple of length 2: (a, b)"
                 )
-            offset_value = parameters_values[0]
 
-        # For constant function f(x) = k, integral from a to b is k * (b - a)
-        return offset_value * (b - a)
+            a, b = limits
+
+            # Use provided parameter values or current values
+            if parameters_values is None:
+                offset_value = self.offset.value
+            else:
+                if len(parameters_values) != 1:
+                    raise ValueError(
+                        f"Expected 1 parameter value, got {len(parameters_values)}"
+                    )
+                offset_value = parameters_values[0]
+
+            # For constant function f(x) = k, integral from a to b is k * (b - a)
+            return offset_value * (b - a)
 
     @property
     def _constant_term(self):

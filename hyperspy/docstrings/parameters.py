@@ -143,6 +143,20 @@ SCALABLE_FIXED_PATTERN_INTEGRATION_TEMPLATE = """%s
             The integration result using analytical spline integration when interpolation
             is enabled and method allows it, otherwise numerical integration.%s"""
 
+# Variable limits docstring templates
+LIMITS_VARIABLE_DOCSTRING = """limits : tuple, array-like, or tuple of array-like
+            Integration limits. Can be:
+
+            * (a, b) : Fixed limits for all navigation positions
+            * array-like : Variable limits with shape matching navigation dimensions.
+              Each element should be a tuple (a, b) for that navigation position
+            * For double integration: [(a1, b1), (a2, b2)] where each can be
+              fixed or variable limits"""
+
+LIMITS_VARIABLE_SIMPLE_DOCSTRING = """limits : tuple or array-like
+            Integration limits (a, b) for single variable, or array of (a, b) tuples
+            for variable limits across navigation dimensions."""
+
 EXPRESSION_INTEGRATION_TEMPLATE = """%s
         **kwargs
             Additional keyword arguments passed to the integration methods.

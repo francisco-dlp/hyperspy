@@ -395,8 +395,7 @@ class Expression(Component):
             self._symbolic_integration_available = False
 
     def function_nd(self, *args, parameters_values=None):
-        """
-        Calculate the component over given axes and with given parameter values.
+        """Calculate the component over given axes and with given parameter values.
 
         Parameters
         ----------
@@ -447,8 +446,7 @@ class Expression(Component):
     def integrate_nd(
         self, limits, variable="x", method="auto", parameters_values=None, **kwargs
     ):
-        """
-        Integrate the expression over multiple parameter sets simultaneously.
+        """Integrate the expression over multiple parameter sets simultaneously.
 
         This method efficiently computes the integral for multidimensional navigation
         arrays of parameters, similar to function_nd. It attempts symbolic integration
@@ -834,20 +832,25 @@ class Expression(Component):
     def integrate(
         self, limits, variable="x", method="auto", parameters_values=None, **kwargs
     ):
-        """
-        Integrate the expression symbolically or numerically.
+        """Integrate the expression symbolically or numerically.
 
         This method first attempts symbolic integration when available and the
         method is 'auto' or 'symbolic'. If symbolic integration is not available
         or fails, it falls back to numerical integration using the parent
         Component class's integration method.
 
+        Supports both fixed and variable integration limits for navigation-aware
+        integration across multiple parameter sets.
+
         Parameters
         ----------
-        limits : tuple or list of tuples
-            Integration limits for the variable(s). For single variable: (a, b).
-            For double integration: [(a1, b1), (a2, b2)] corresponding to variable
-            order.
+        limits : tuple, array-like, or tuple of array-like
+            Integration limits. Can be:
+
+            * (a, b) : Fixed limits for all navigation positions
+            * (a_array, b_array) : Variable limits with arrays matching navigation dimensions
+            * array of (a, b) tuples : Variable limits for each navigation position
+            * For double integration: [(a1, b1), (a2, b2)] where each can be fixed or variable
         variable : str or tuple, default 'x'
             Variable(s) to integrate with respect to. For 1D components: 'x'.
             For 2D components: 'x', 'y', or ('x', 'y') for double integration.
@@ -860,19 +863,20 @@ class Expression(Component):
             * 'auto' : try symbolic first, fallback to numerical
             * 'symbolic' : use only symbolic integration
             * 'numerical' : use only numerical integration
-        parameters_values : list, None, optional
+        parameters_values : list or None, optional
             List of parameters values used to calculate the component.
             The order of the parameter in the list is defined in the
-            ``parameters`` attributes of the components
+            ``parameters`` attributes of the components.
             If ``None``, the parameters values for all navigation positions
-            are considered. The default is None.
+            are considered. Default is None.
         **kwargs
             Additional keyword arguments passed to the integration methods.
 
         Returns
         -------
         float or numpy.ndarray
-            Integration result.
+            Integration result. Returns scalar for fixed limits, or array matching
+            navigation dimensions for variable limits.
 
         Raises
         ------
@@ -886,40 +890,86 @@ class Expression(Component):
 
         Examples
         --------
-        >>> # Create a polynomial expression
+        Create a polynomial expression:
+
         >>> poly = hs.model.components1D.Expression(
         ...     expression="a * x**2 + b * x + c",
         ...     name="Polynomial",
         ...     a=1.0, b=2.0, c=3.0
         ... )
-        >>> # Integrate from 0 to 2 (uses numerical integration by default)
+
+        Integrate from 0 to 2 (uses numerical integration by default):
+
         >>> result = poly.integrate((0, 2))
-        >>>
-        >>> # Enable symbolic integration for faster computation
+
+        Variable limits integration:
+
+        >>> import numpy as np
+        >>> a_vals = np.array([0, 1])
+        >>> b_vals = np.array([2, 3])
+        >>> results = poly.integrate((a_vals, b_vals))
+
+        Enable symbolic integration for faster computation:
+
         >>> poly_symbolic = hs.model.components1D.Expression(
         ...     expression="a * x**2 + b * x + c",
         ...     name="Polynomial",
         ...     a=1.0, b=2.0, c=3.0,
         ...     compute_integrals=True
         ... )
-        >>> # This will use symbolic integration
+
+        This will use symbolic integration for fixed limits:
+
         >>> result = poly_symbolic.integrate((0, 2), method='auto')
-        >>> # Force numerical integration
+
+        Variable limits will fall back to numerical:
+
+        >>> results = poly_symbolic.integrate((a_vals, b_vals), method='auto')
+
+        Force numerical integration:
+
         >>> result = poly_symbolic.integrate((0, 2), method='numerical')
-        >>>
-        >>> # 2D component double integration
+
+        2D component double integration:
+
         >>> expr_2d = hs.model.components2D.Expression(
         ...     expression="a * x * y + b * x**2",
         ...     name="TwoDFunction",
         ...     a=2.0, b=1.0,
         ...     compute_integrals=True
         ... )
-        >>> # Double integration over x=[0,1], y=[0,2]
+
+        Double integration over x=[0,1], y=[0,2]:
+
         >>> result = expr_2d.integrate([(0, 1), (0, 2)], ('x', 'y'), method='symbolic')
-        >>>
-        >>> # Runtime parameter substitution for Expression components
+
+        Runtime parameter substitution for Expression components:
+
         >>> result = poly.integrate((0, 2), parameters_values=[2.0, 1.0, 0.5])
         """
+        # Check if we have variable limits first
+        nav_shape = getattr(self, "_navigation_shape", None)
+        is_variable_limits, parsed_limits = self._parse_limits(limits, nav_shape)
+
+        # For variable limits, symbolic integration is not currently supported
+        # Fall back to numerical integration via parent Component class
+        if is_variable_limits:
+            if method == "symbolic":
+                raise NotImplementedError(
+                    "Symbolic integration with variable limits is not currently supported. "
+                    "Use method='numerical' or 'auto' for variable limits integration."
+                )
+
+            # Use parent class's variable limits integration
+            if parameters_values is not None:
+                # Need to handle parameter substitution for variable limits
+                return self._integrate_numerical_variable_with_params(
+                    parsed_limits, variable, parameters_values, **kwargs
+                )
+            else:
+                return super().integrate(limits, variable, method="numerical", **kwargs)
+
+        # For fixed limits, proceed with original logic
         # Validate method
         valid_methods = {"auto", "symbolic", "numerical"}
         if method not in valid_methods:
@@ -1150,6 +1200,7 @@ class Expression(Component):
         self, limits, variable, parameters_values, **kwargs
     ):
         """Perform numerical integration with custom parameter values."""
+        import numpy as np
         from scipy.integrate import dblquad, quad
 
         # Temporarily store original parameter values
@@ -1269,9 +1320,9 @@ class Expression(Component):
                 result = dblquad(
                     integrand,
                     x_limits[0],
-                    x_limits[1],  # x integration limits
-                    y_limits[0],
-                    y_limits[1],  # y integration limits
+                    x_limits[1],
+                    lambda x: y_limits[0],
+                    lambda x: y_limits[1],
                 )[0]
                 return result
 
@@ -1282,6 +1333,75 @@ class Expression(Component):
             # Restore original parameter values
             for param, original_value in zip(self.parameters, original_values):
                 param.value = original_value
+
+    def _integrate_numerical_variable_with_params(
+        self, parsed_limits, variable, parameters_values, **kwargs
+    ):
+        """Handle numerical variable limits integration with parameter substitution."""
+        import numpy as np
+        from scipy.integrate import quad
+
+        # Extract limits - could be (a_array, b_array) or array of (a,b) tuples
+        if isinstance(parsed_limits, tuple) and len(parsed_limits) == 2:
+            # Format: (a_array, b_array)
+            a_array, b_array = parsed_limits
+        else:
+            # Format: array of (a,b) tuples
+            limits_array = np.asarray(parsed_limits)
+            a_array = limits_array[..., 0]
+            b_array = limits_array[..., 1]
+
+        # Initialize results array with same shape as limits
+        results = np.zeros_like(a_array, dtype=float)
+
+        # Store original parameter values
+        original_values = [p.value for p in self.parameters]
+
+        try:
+            # Set the provided parameter values
+            for param, value in zip(self.parameters, parameters_values):
+                param.value = value
+
+            # Integrate for each navigation position
+            for idx in np.ndindex(a_array.shape):
+                a = a_array[idx]
+                b = b_array[idx]
+
+                # Create integrand function for this position
+                if self._is2D and variable in ["x", "y"]:
+                    if variable == "x":
+                        if "y" not in kwargs:
+                            raise ValueError(
+                                "For 2D components, 'y' value must be provided when integrating over 'x'"
+                            )
+                        y_fixed = kwargs["y"]
+
+                        def integrand(x_val):
+                            return self.function(x_val, y_fixed)
+
+                    elif variable == "y":
+                        if "x" not in kwargs:
+                            raise ValueError(
+                                "For 2D components, 'x' value must be provided when integrating over 'y'"
+                            )
+                        x_fixed = kwargs["x"]
+
+                        def integrand(y_val):
+                            return self.function(x_fixed, y_val)
+
+                else:
+                    # 1D component
+                    def integrand(x_val):
+                        return self.function(x_val)
+
+                results[idx] = quad(integrand, a, b)[0]
+
+        finally:
+            # Restore original parameter values
+            for param, original_value in zip(self.parameters, original_values):
+                param.value = original_value
+
+        return results if results.size > 1 else results.item()
 
 
 def _check_parameter_linearity(expr, name):

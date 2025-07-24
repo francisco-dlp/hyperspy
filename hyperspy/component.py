@@ -1373,6 +1373,98 @@ class Component(t.HasTraits):
         """
         display(CurrentComponentValues(self, only_free=only_free))
 
+    def _parse_limits(self, limits, nav_shape=None):
+        """
+        Parse integration limits to handle both fixed and variable limits.
+
+        Parameters
+        ----------
+        limits : tuple, array-like, or tuple of array-like
+            Integration limits to parse
+        nav_shape : tuple, optional
+            Navigation shape for validation of variable limits
+
+        Returns
+        -------
+        tuple
+            (is_variable, parsed_limits) where is_variable is bool indicating
+            if limits vary across navigation, and parsed_limits is the processed limits
+        """
+        import numpy as np
+
+        # Handle single variable limits
+        if isinstance(limits, tuple) and len(limits) == 2:
+            # Check if this is a simple (a, b) tuple or variable limits
+            if np.isscalar(limits[0]) and np.isscalar(limits[1]):
+                return False, limits  # Fixed limits
+            else:
+                # Could be variable limits - check if they're arrays or can be broadcasted
+                a_array = np.asarray(limits[0])
+                b_array = np.asarray(limits[1])
+
+                # Check if either is an array (not scalar)
+                if a_array.ndim > 0 or b_array.ndim > 0:
+                    # Try broadcasting
+                    try:
+                        broadcasted = np.broadcast_arrays(a_array, b_array)
+                        a_broadcasted, b_broadcasted = broadcasted
+
+                        if nav_shape is not None and a_broadcasted.shape != nav_shape:
+                            raise ValueError(
+                                f"Variable limit shape {a_broadcasted.shape} doesn't match "
+                                f"navigation shape {nav_shape}"
+                            )
+                        return True, (a_broadcasted, b_broadcasted)  # Variable limits
+                    except ValueError as e:
+                        if "broadcast" in str(e).lower():
+                            raise ValueError(
+                                "Lower and upper limits cannot be broadcasted together"
+                            )
+                        else:
+                            # Re-raise other ValueError types
+                            raise
+                else:
+                    # Both are scalars - fixed limits
+                    return False, limits
+
+        # Handle double integration limits [(a1,b1), (a2,b2)]
+        elif isinstance(limits, (list, tuple)) and len(limits) == 2:
+            # Check if this is double integration or variable limits
+            if (
+                isinstance(limits[0], (list, tuple))
+                and len(limits[0]) == 2
+                and isinstance(limits[1], (list, tuple))
+                and len(limits[1]) == 2
+            ):
+                # Could be double integration limits - check if all are scalars
+                all_scalars = (
+                    np.isscalar(limits[0][0])
+                    and np.isscalar(limits[0][1])
+                    and np.isscalar(limits[1][0])
+                    and np.isscalar(limits[1][1])
+                )
+                if all_scalars:
+                    return False, limits  # Fixed double integration limits
+
+        # Handle array of limit tuples [(a1,b1), (a2,b2), ...]
+        elif hasattr(limits, "__iter__") and not isinstance(limits, (str, tuple)):
+            try:
+                limits_array = np.asarray(limits)
+                if limits_array.ndim >= 1 and limits_array.shape[-1] == 2:
+                    # This is an array of (a,b) tuples
+                    if nav_shape is not None and limits_array.shape[:-1] != nav_shape:
+                        raise ValueError(
+                            f"Variable limit shape {limits_array.shape[:-1]} doesn't match "
+                            f"navigation shape {nav_shape}"
+                        )
+                    return True, limits_array  # Variable limits
+                else:
+                    raise ValueError("Invalid limits format")
+            except (ValueError, TypeError):
+                pass
+
+        return False, limits
+
     def integrate(self, limits, variable="x", method="numerical", **kwargs):
         """
         Integrate the component with respect to the specified variable.
@@ -1403,9 +1495,14 @@ class Component(t.HasTraits):
         1D component integration:
 
         >>> result = component.integrate((0, 10), variable='x')
-        >>> # Using different methods (all equivalent for base Component)
-        >>> result = component.integrate((0, 10), variable='x', method='numerical')
-        >>> result = component.integrate((0, 10), variable='x', method='auto')
+
+        Variable limits integration:
+
+        >>> import numpy as np
+        >>> # Different limits for each navigation position
+        >>> a_vals = np.array([0, 1, 2])
+        >>> b_vals = np.array([5, 6, 7])
+        >>> results = component.integrate((a_vals, b_vals))
 
         2D component double integration:
 
@@ -1415,15 +1512,11 @@ class Component(t.HasTraits):
 
         >>> # Integrate over x while fixing y=0.5
         >>> result = component.integrate((0, 10), variable='x', y=0.5)
-        >>> # Integrate over y while fixing x=1.0
-        >>> result = component.integrate((-1, 1), variable='y', x=1.0)
-        >>> # Integrate over x for multiple y values
-        >>> import numpy as np
-        >>> y_values = np.array([0.5, 1.0, 1.5])
-        >>> results = component.integrate((0, 10), variable='x', y=y_values)
+        >>> # Variable limits with fixed y
+        >>> results = component.integrate((a_vals, b_vals), variable='x', y=0.5)
         """
         # Import here to avoid circular imports
-        from scipy.integrate import dblquad, quad
+        from scipy.integrate import dblquad
 
         # Validate method parameter
         valid_methods = {"auto", "numerical", "symbolic"}
@@ -1487,118 +1580,212 @@ class Component(t.HasTraits):
             if var_x not in ["x"] or var_y not in ["y"]:
                 raise ValueError("For 2D integration, variables must be 'x' and 'y'")
 
-            # Create integrand function for double integration
-            def integrand(y_val, x_val):
-                return self.function(x_val, y_val)
+            # Check if we have variable limits for double integration
+            nav_shape = getattr(self, "_navigation_shape", None)
+            x_is_variable, x_parsed = self._parse_limits(x_limits, nav_shape)
+            y_is_variable, y_parsed = self._parse_limits(y_limits, nav_shape)
 
-            result = dblquad(
-                integrand,
-                x_limits[0],
-                x_limits[1],  # x integration limits
-                y_limits[0],
-                y_limits[1],  # y integration limits
-            )[0]
-            return result
+            # For double integration, both limits must be either variable or fixed
+            if x_is_variable or y_is_variable:
+                if not (x_is_variable and y_is_variable):
+                    raise ValueError(
+                        "For double integration with variable limits, both x and y "
+                        "limits must be variable (arrays)"
+                    )
+
+                # Variable limits double integration
+                x_a, x_b = x_parsed
+                y_a, y_b = y_parsed
+
+                # Broadcast all limits to the same shape
+                broadcast_shape = np.broadcast_shapes(
+                    np.asarray(x_a).shape,
+                    np.asarray(x_b).shape,
+                    np.asarray(y_a).shape,
+                    np.asarray(y_b).shape,
+                )
+
+                x_a = np.broadcast_to(np.asarray(x_a), broadcast_shape)
+                x_b = np.broadcast_to(np.asarray(x_b), broadcast_shape)
+                y_a = np.broadcast_to(np.asarray(y_a), broadcast_shape)
+                y_b = np.broadcast_to(np.asarray(y_b), broadcast_shape)
+
+                # Create integrand function
+                def integrand(y_val, x_val):
+                    return self.function(x_val, y_val)
+
+                # Vectorized integration over all navigation positions
+                results = []
+                for xa, xb, ya, yb in zip(x_a.flat, x_b.flat, y_a.flat, y_b.flat):
+                    result = dblquad(integrand, xa, xb, ya, yb)[0]
+                    results.append(result)
+
+                results = np.array(results).reshape(broadcast_shape)
+                return results if results.size > 1 else results.item()
+
+            else:
+                # Fixed limits double integration
+                # Create integrand function for double integration
+                def integrand(y_val, x_val):
+                    return self.function(x_val, y_val)
+
+                result = dblquad(
+                    integrand,
+                    x_limits[0],
+                    x_limits[1],  # x integration limits
+                    y_limits[0],
+                    y_limits[1],  # y integration limits
+                )[0]
+                return result
 
         else:
             # Single variable integration
-            if not isinstance(limits, tuple) or len(limits) != 2:
-                raise ValueError(
-                    "For single variable integration, limits must be a tuple (a, b)"
+
+            # Check if we have variable limits
+            nav_shape = getattr(self, "_navigation_shape", None)
+            is_variable_limits, parsed_limits = self._parse_limits(limits, nav_shape)
+
+            if not is_variable_limits:
+                # Fixed limits - original logic
+                if not isinstance(limits, tuple) or len(limits) != 2:
+                    raise ValueError(
+                        "For single variable integration, limits must be a tuple (a, b)"
+                    )
+
+                a, b = limits
+                return self._integrate_single_fixed(a, b, variable, **kwargs)
+            else:
+                # Variable limits - need to integrate over each navigation position
+                return self._integrate_single_variable(
+                    parsed_limits, variable, **kwargs
                 )
 
-            a, b = limits
+    def _integrate_single_fixed(self, a, b, variable="x", **kwargs):
+        """Handle single variable integration with fixed limits."""
+        import numpy as np
+        from scipy.integrate import quad
 
-            if variable == "x":
-                # For 1D components or integrating 2D component w.r.t. x
-                is_2d_component = (
-                    hasattr(self, "_axes_manager")
-                    and self._axes_manager is not None
-                    and hasattr(self._axes_manager, "signal_dimension")
-                    and self._axes_manager.signal_dimension == 2
-                ) or (hasattr(self, "_is2D") and self._is2D)
+        if variable == "x":
+            # For 1D components or integrating 2D component w.r.t. x
+            is_2d_component = (
+                hasattr(self, "_axes_manager")
+                and self._axes_manager is not None
+                and hasattr(self._axes_manager, "signal_dimension")
+                and self._axes_manager.signal_dimension == 2
+            ) or (hasattr(self, "_is2D") and self._is2D)
 
-                if is_2d_component:
-                    # For 2D components, we need to provide both x and y
-                    # This creates a function of x only by fixing y (marginal
-                    # integration)
-                    if "y" not in kwargs:
-                        raise ValueError(
-                            "For 2D component integration over 'x', must provide "
-                            "'y' value as keyword argument"
-                        )
-                    y_fixed = kwargs["y"]
-
-                    if np.isscalar(y_fixed):
-                        # Single y value - return scalar result
-                        def integrand(x_val):
-                            return self.function(x_val, y_fixed)
-
-                        result, _ = quad(integrand, a, b)
-                        return result
-                    else:
-                        # Array of y values - return array of results
-                        y_array = np.asarray(y_fixed)
-                        results = np.zeros_like(y_array, dtype=float)
-
-                        for i, y_val in enumerate(y_array.flat):
-
-                            def integrand(x_val):
-                                return self.function(x_val, y_val)
-
-                            results.flat[i], _ = quad(integrand, a, b)
-
-                        return results.reshape(y_array.shape)
-                else:
-                    # 1D component
-                    def integrand(x_val):
-                        return self.function(x_val)
-
-                    result, _ = quad(integrand, a, b)
-                    return result
-
-            elif variable == "y":
-                is_2d_component = (
-                    hasattr(self, "_axes_manager")
-                    and self._axes_manager is not None
-                    and hasattr(self._axes_manager, "signal_dimension")
-                    and self._axes_manager.signal_dimension == 2
-                ) or (hasattr(self, "_is2D") and self._is2D)
-
-                if not is_2d_component:
-                    raise ValueError("Variable 'y' is only valid for 2D components")
-
-                if "x" not in kwargs:
+            if is_2d_component:
+                # For 2D components, we need to provide both x and y
+                # This creates a function of x only by fixing y (marginal
+                # integration)
+                if "y" not in kwargs:
                     raise ValueError(
-                        "For 2D component integration over 'y', must provide "
-                        "'x' value as keyword argument"
+                        "For 2D component integration over 'x', must provide "
+                        "'y' value as keyword argument"
                     )
-                x_fixed = kwargs["x"]
+                y_fixed = kwargs["y"]
 
-                if np.isscalar(x_fixed):
-                    # Single x value - return scalar result
-                    def integrand(y_val):
-                        return self.function(x_fixed, y_val)
+                if np.isscalar(y_fixed):
+                    # Single y value - return scalar result
+                    def integrand(x_val):
+                        return self.function(x_val, y_fixed)
 
                     result, _ = quad(integrand, a, b)
                     return result
                 else:
-                    # Array of x values - return array of results
-                    x_array = np.asarray(x_fixed)
-                    results = np.zeros_like(x_array, dtype=float)
+                    # Array of y values - return array of results
+                    y_array = np.asarray(y_fixed)
+                    results = np.zeros_like(y_array, dtype=float)
 
-                    for i, x_val in enumerate(x_array.flat):
+                    for i, y_val in enumerate(y_array.flat):
 
-                        def integrand(y_val):
+                        def integrand(x_val):
                             return self.function(x_val, y_val)
 
                         results.flat[i], _ = quad(integrand, a, b)
 
-                    return results.reshape(x_array.shape)
+                    return results.reshape(y_array.shape)
             else:
+                # 1D component
+                def integrand(x_val):
+                    return self.function(x_val)
+
+                result, _ = quad(integrand, a, b)
+                return result
+
+        elif variable == "y":
+            is_2d_component = (
+                hasattr(self, "_axes_manager")
+                and self._axes_manager is not None
+                and hasattr(self._axes_manager, "signal_dimension")
+                and self._axes_manager.signal_dimension == 2
+            ) or (hasattr(self, "_is2D") and self._is2D)
+
+            if not is_2d_component:
+                raise ValueError("Variable 'y' is only valid for 2D components")
+
+            if "x" not in kwargs:
                 raise ValueError(
-                    f"Unsupported variable: {variable}. Use 'x', 'y', or ('x', 'y')"
+                    "For 2D component integration over 'y', must provide "
+                    "'x' value as keyword argument"
                 )
+            x_fixed = kwargs["x"]
+
+            if np.isscalar(x_fixed):
+                # Single x value - return scalar result
+                def integrand(y_val):
+                    return self.function(x_fixed, y_val)
+
+                result, _ = quad(integrand, a, b)
+                return result
+            else:
+                # Array of x values - return array of results
+                x_array = np.asarray(x_fixed)
+                results = np.zeros_like(x_array, dtype=float)
+
+                for i, x_val in enumerate(x_array.flat):
+
+                    def integrand(y_val):
+                        return self.function(x_val, y_val)
+
+                    results.flat[i], _ = quad(integrand, a, b)
+
+                return results.reshape(x_array.shape)
+        else:
+            raise ValueError(
+                f"Unsupported variable: {variable}. Use 'x', 'y', or ('x', 'y')"
+            )
+
+    def _integrate_single_variable(self, parsed_limits, variable="x", **kwargs):
+        """Handle single variable integration with variable limits."""
+        import numpy as np
+
+        # Extract limits - could be (a_array, b_array) or array of (a,b) tuples
+        if isinstance(parsed_limits, tuple) and len(parsed_limits) == 2:
+            # Format: (a_array, b_array)
+            a_array, b_array = parsed_limits
+        else:
+            # Format: array of (a,b) tuples
+            limits_array = np.asarray(parsed_limits)
+            a_array = limits_array[..., 0]
+            b_array = limits_array[..., 1]
+
+        # Initialize results array with same shape as limits
+        results = np.zeros_like(a_array, dtype=float)
+
+        # Integrate for each navigation position
+        for idx in np.ndindex(a_array.shape):
+            a = a_array[idx]
+            b = b_array[idx]
+
+            # Use the fixed limits integration for each position
+            results[idx] = self._integrate_single_fixed(a, b, variable, **kwargs)
+
+        # Return scalar if results has only one element
+        if results.size == 1:
+            return results.item()
+
+        return results
 
     def integrate_nd(self, limits, variable="x", method="numerical", **kwargs):
         """
@@ -1635,8 +1822,10 @@ class Component(t.HasTraits):
 
 
 # Apply dynamic docstring interpolation following HyperSpy patterns
-Component.integrate.__doc__ %= INTEGRATION_PARAMETERS_DOCSTRING
-Component.integrate_nd.__doc__ %= INTEGRATION_ND_PARAMETERS_DOCSTRING
+if Component.integrate.__doc__ is not None:
+    Component.integrate.__doc__ %= INTEGRATION_PARAMETERS_DOCSTRING
+if Component.integrate_nd.__doc__ is not None:
+    Component.integrate_nd.__doc__ %= INTEGRATION_ND_PARAMETERS_DOCSTRING
 
 
 def _get_scaling_factor(signal, axis, parameter):

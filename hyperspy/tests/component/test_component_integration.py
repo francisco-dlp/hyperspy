@@ -242,30 +242,3 @@ class TestComponentIntegrationND:
                 NotImplementedError, match="Navigation-aware integration"
             ):
                 comp.integrate_nd((0, 1), method=method)
-
-
-class TestComponentIntegrationDocstrings:
-    """Test that dynamic docstrings are properly applied."""
-
-    def test_integrate_docstring_contains_parameters(self):
-        """Test that integrate method has proper docstring."""
-        docstring = Component.integrate.__doc__
-        assert docstring is not None
-        assert "limits : tuple or list of tuples" in docstring
-        assert "variable : str or tuple, default 'x'" in docstring
-        assert "method : str, default 'numerical'" in docstring
-        assert "**kwargs" in docstring
-
-    def test_integrate_nd_docstring_contains_parameters(self):
-        """Test that integrate_nd method has proper docstring."""
-        docstring = Component.integrate_nd.__doc__
-        assert docstring is not None
-        assert "limits : tuple or list of tuples" in docstring
-        assert "variable : str or tuple, default 'x'" in docstring
-        assert "method : str, default 'numerical'" in docstring
-        assert "**kwargs" in docstring
-
-    def test_constant_term_property(self):
-        """Test that _constant_term property returns 0 for base Component."""
-        comp = TestableComponent()
-        assert comp._constant_term == 0

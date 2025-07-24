@@ -365,10 +365,17 @@ class ScalableFixedPattern(Component):
         The component function is: f(x) = yscale * spline(xscale * x - shift)
         Integration accounts for the scaling and shifting transformations.
 
+        Supports both fixed and variable integration limits for navigation-aware
+        integration across multiple parameter sets.
+
         Parameters
         ----------
-        limits : tuple
-            Integration limits (a, b) where a and b are the lower and upper bounds.
+        limits : tuple, array-like, or tuple of array-like
+            Integration limits. Can be:
+
+            * (a, b) : Fixed limits for all navigation positions
+            * (a_array, b_array) : Variable limits with arrays matching navigation dimensions
+            * array of (a, b) tuples : Variable limits for each navigation position
         variable : str, default 'x'
             Integration variable (included for API compatibility).
         method : str, default 'auto'
@@ -388,14 +395,16 @@ class ScalableFixedPattern(Component):
 
         Returns
         -------
-        float
+        float or numpy.ndarray
             The integration result using analytical spline integration when interpolation
             is enabled and method allows it, otherwise numerical integration.
+            Returns scalar for fixed limits, or array matching navigation dimensions
+            for variable limits.
 
         Raises
         ------
         ValueError
-            If limits is not a tuple of length 2, or if method is invalid.
+            If limits format is invalid, or if method is invalid.
         NotImplementedError
             If method='analytical' but spline integration is not available.
 
@@ -415,19 +424,49 @@ class ScalableFixedPattern(Component):
         >>> signal = hs.signals.Signal1D(data)
         >>> sfp = hs.model.components1D.ScalableFixedPattern(signal)
         >>> result = sfp.integrate((0, 5))  # Uses analytical spline integration by default
+        >>>
+        >>> # Variable limits integration
+        >>> import numpy as np
+        >>> a_vals = np.array([0, 1])
+        >>> b_vals = np.array([5, 6])
+        >>> results = sfp.integrate((a_vals, b_vals))
+        >>>
         >>> result = sfp.integrate((0, 5), method='analytical')  # Force analytical
         >>> result = sfp.integrate((0, 5), method='numerical')   # Force numerical
         >>>
         >>> # Runtime parameter substitution [xscale, yscale, shift]
         >>> result = sfp.integrate((0, 5), parameters_values=[2.0, 3.0, 1.0])
         """
+
         # Validate method
         valid_methods = {"auto", "analytical", "numerical"}
         if method not in valid_methods:
             raise ValueError(f"Invalid method '{method}'. Supported: {valid_methods}")
 
+        # Check if we have variable limits
+        nav_shape = getattr(self, "_navigation_shape", None)
+        is_variable_limits, parsed_limits = self._parse_limits(limits, nav_shape)
+
+        if is_variable_limits:
+            # Variable limits - analytical integration with variable limits
+            # is complex for splines, so fall back to numerical for now
+            if method == "analytical":
+                raise NotImplementedError(
+                    "Analytical spline integration with variable limits is not currently supported. "
+                    "Use method='numerical' or 'auto' for variable limits integration."
+                )
+
+            # Use numerical integration for variable limits
+            if parameters_values is not None:
+                return self._integrate_numerical_variable_with_params(
+                    parsed_limits, variable, parameters_values, **kwargs
+                )
+            else:
+                return super().integrate(limits, variable, method="numerical", **kwargs)
+
+        # Fixed limits - proceed with original logic
         if not isinstance(limits, tuple) or len(limits) != 2:
-            raise ValueError("limits must be a tuple of length 2: (a, b)")
+            raise ValueError("For fixed limits, must be a tuple of length 2: (a, b)")
 
         a, b = limits
 
@@ -447,6 +486,42 @@ class ScalableFixedPattern(Component):
         spline_available = (
             self.interpolate and hasattr(self, "f") and hasattr(self.f, "integrate")
         )
+
+        if method == "analytical" and not spline_available:
+            raise NotImplementedError(
+                "Analytical spline integration is not available. "
+                "Ensure interpolation is enabled and spline is properly initialized."
+            )
+
+        if method in ("auto", "analytical") and spline_available:
+            # Transform integration limits for scaled and shifted spline
+            # f(x) = yscale * spline(xscale * x - shift)
+            # ∫ f(x) dx = yscale * (1/xscale) * ∫ spline(u) du
+            # where u = xscale * x - shift
+            transformed_a = xscale_value * a - shift_value
+            transformed_b = xscale_value * b - shift_value
+
+            # Integrate the underlying spline (this is analytical, not numerical)
+            spline_integral = self.f.integrate(transformed_a, transformed_b)
+
+            # Apply scaling factors
+            # d/dx [yscale * spline(xscale * x - shift)] = yscale * xscale * spline'(xscale * x - shift)
+            # So ∫ yscale * spline(xscale * x - shift) dx = yscale * (1/xscale) * ∫ spline(u) du
+            result = yscale_value * spline_integral / xscale_value
+
+            return float(result)
+
+        # Fall back to numerical integration
+        if method in ("auto", "numerical"):
+            # If parameters_values is provided, we need to handle numerical integration ourselves
+            if parameters_values is not None:
+                return self._integrate_numerical_with_params(
+                    limits, variable, parameters_values, **kwargs
+                )
+            else:
+                return super().integrate(limits, variable, method, **kwargs)
+
+        raise RuntimeError(f"Integration failed for method '{method}'")
 
         if method == "analytical" and not spline_available:
             raise NotImplementedError(
@@ -516,3 +591,53 @@ class ScalableFixedPattern(Component):
             self.xscale.value = original_xscale
             self.yscale.value = original_yscale
             self.shift.value = original_shift
+
+    def _integrate_numerical_variable_with_params(
+        self, parsed_limits, variable, parameters_values, **kwargs
+    ):
+        """Handle numerical variable limits integration with parameter substitution."""
+        import numpy as np
+        from scipy.integrate import quad
+
+        # Extract limits - could be (a_array, b_array) or array of (a,b) tuples
+        if isinstance(parsed_limits, tuple) and len(parsed_limits) == 2:
+            # Format: (a_array, b_array)
+            a_array, b_array = parsed_limits
+        else:
+            # Format: array of (a,b) tuples
+            limits_array = np.asarray(parsed_limits)
+            a_array = limits_array[..., 0]
+            b_array = limits_array[..., 1]
+
+        # Initialize results array with same shape as limits
+        results = np.zeros_like(a_array, dtype=float)
+
+        # Store original parameter values
+        original_xscale = self.xscale.value
+        original_yscale = self.yscale.value
+        original_shift = self.shift.value
+
+        try:
+            # Set the provided parameter values
+            xscale_value, yscale_value, shift_value = parameters_values
+            self.xscale.value = xscale_value
+            self.yscale.value = yscale_value
+            self.shift.value = shift_value
+
+            # Integrate for each navigation position
+            for idx in np.ndindex(a_array.shape):
+                a = a_array[idx]
+                b = b_array[idx]
+
+                def integrand(x_val):
+                    return self.function(x_val)
+
+                results[idx] = quad(integrand, a, b)[0]
+
+        finally:
+            # Restore original parameter values
+            self.xscale.value = original_xscale
+            self.yscale.value = original_yscale
+            self.shift.value = original_shift
+
+        return results if results.size > 1 else results.item()
