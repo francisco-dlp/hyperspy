@@ -170,6 +170,183 @@ class ScalableFixedPattern(Component):
 
     function_nd.__doc__ %= FUNCTION_ND_DOCSTRING
 
+    def integrate_nd(
+        self, limits, variable="x", method="auto", parameters_values=None, **kwargs
+    ):
+        """
+        Integrate the scalable fixed pattern over multiple parameter sets simultaneously.
+
+        This method efficiently computes the integral for multidimensional navigation
+        arrays of parameters, similar to function_nd. It uses analytical spline integration
+        when interpolation is enabled, falling back to numerical integration otherwise.
+
+        Parameters
+        ----------
+        limits : tuple
+            Integration limits (a, b) where a and b are the lower and upper bounds.
+        variable : str, default 'x'
+            Integration variable (included for API compatibility).
+        method : str, default 'auto'
+            Integration method to use:
+
+            * 'auto' : use analytical spline integration when available, fallback to numerical
+            * 'analytical' : use only analytical spline integration (raises error if unavailable)
+            * 'numerical' : use only numerical integration
+        parameters_values : list, optional
+            List of parameter arrays for multidimensional navigation. If None,
+            uses the parameter maps. Should contain three arrays: [xscale_values, yscale_values, shift_values].
+        **kwargs
+            Additional arguments passed to the integration methods.
+
+        Returns
+        -------
+        numpy.ndarray
+            Integration results with shape matching the navigation dimensions.
+            For single parameter set, returns a scalar.
+
+        Examples
+        --------
+        >>> # Create ScalableFixedPattern with navigation-dependent parameters
+        >>> signal = hs.signals.Signal1D(data)
+        >>> sfp = hs.model.components1D.ScalableFixedPattern(signal)
+        >>> # Integration with parameter arrays
+        >>> xscale_vals = np.array([1.0, 1.5, 2.0])
+        >>> yscale_vals = np.array([2.0, 3.0, 4.0])
+        >>> shift_vals = np.array([0.0, 0.5, 1.0])
+        >>> results = sfp.integrate_nd((0, 5), parameters_values=[xscale_vals, yscale_vals, shift_vals])
+        """
+        # Validate method
+        valid_methods = {"auto", "analytical", "numerical"}
+        if method not in valid_methods:
+            raise ValueError(f"Invalid method '{method}'. Supported: {valid_methods}")
+
+        if not isinstance(limits, tuple) or len(limits) != 2:
+            raise ValueError("limits must be a tuple of length 2: (a, b)")
+
+        # Use provided parameter values or get from parameter maps
+        if parameters_values is None:
+            if self._is_navigation_multidimensional:
+                try:
+                    parameters_values = [
+                        self.xscale.map["values"],
+                        self.yscale.map["values"],
+                        self.shift.map["values"],
+                    ]
+                except (TypeError, AttributeError):
+                    raise RuntimeError(
+                        "Parameter maps must be set for multidimensional integration. "
+                        "Use function_nd first or provide parameters_values explicitly."
+                    )
+            else:
+                # Single parameter case - use regular integrate method
+                return self.integrate(limits, variable, method, **kwargs)
+
+        # Validate parameter arrays
+        if len(parameters_values) != 3:
+            raise ValueError(
+                f"Expected 3 parameter arrays [xscale, yscale, shift], got {len(parameters_values)}"
+            )
+
+        xscale_values, yscale_values, shift_values = parameters_values
+
+        # Check if analytical integration is possible and requested
+        analytical_available = (
+            hasattr(self, "_interpolator") and self._interpolator is not None
+        )
+
+        if method == "analytical" and not analytical_available:
+            raise NotImplementedError(
+                "Analytical integration is not available. "
+                "Enable interpolation or use method='numerical'."
+            )
+
+        # Use analytical integration if available and requested
+        if method in ("auto", "analytical") and analytical_available:
+            try:
+                return self._integrate_analytical_nd(
+                    limits, xscale_values, yscale_values, shift_values
+                )
+            except Exception as e:
+                if method == "analytical":
+                    raise NotImplementedError(f"Analytical integration failed: {e}")
+                # Fall through to numerical for 'auto'
+
+        # Use numerical integration
+        if method in ("auto", "numerical"):
+            return self._integrate_numerical_nd(
+                limits, xscale_values, yscale_values, shift_values, **kwargs
+            )
+
+        raise RuntimeError(f"Integration failed for method '{method}'")
+
+    def _integrate_analytical_nd(
+        self, limits, xscale_values, yscale_values, shift_values
+    ):
+        """Perform analytical spline integration for parameter arrays."""
+        a, b = limits
+        nav_shape = xscale_values.shape
+        results = np.zeros(nav_shape)
+
+        # Compute integration for each navigation position
+        for idx in np.ndindex(nav_shape):
+            xscale_val = xscale_values[idx]
+            yscale_val = yscale_values[idx]
+            shift_val = shift_values[idx]
+
+            # Apply the coordinate transformation for spline integration
+            # f(x) = yscale * spline(xscale * x - shift)
+            # ∫f(x)dx = yscale * (1/xscale) * ∫spline(u)du where u = xscale*x - shift
+            a_transformed = xscale_val * a - shift_val
+            b_transformed = xscale_val * b - shift_val
+
+            # Use the spline's antiderivative
+            spline_integral = self._interpolator.antiderivative()
+            integral_value = spline_integral(b_transformed) - spline_integral(
+                a_transformed
+            )
+
+            # Apply scaling factors
+            results[idx] = yscale_val * (1.0 / xscale_val) * integral_value
+
+        return results
+
+    def _integrate_numerical_nd(
+        self, limits, xscale_values, yscale_values, shift_values, **kwargs
+    ):
+        """Perform numerical integration for parameter arrays."""
+        from scipy.integrate import quad
+
+        a, b = limits
+        nav_shape = xscale_values.shape
+        results = np.zeros(nav_shape)
+
+        # Store original parameter values
+        original_xscale = self.xscale.value
+        original_yscale = self.yscale.value
+        original_shift = self.shift.value
+
+        try:
+            # Compute integration for each navigation position
+            for idx in np.ndindex(nav_shape):
+                # Set parameter values for this navigation position
+                self.xscale.value = xscale_values[idx]
+                self.yscale.value = yscale_values[idx]
+                self.shift.value = shift_values[idx]
+
+                # Use numerical integration
+                def integrand(x_val):
+                    return self.function(x_val)
+
+                results[idx], _ = quad(integrand, a, b)
+
+        finally:
+            # Restore original parameter values
+            self.xscale.value = original_xscale
+            self.yscale.value = original_yscale
+            self.shift.value = original_shift
+
+        return results
+
     def grad_yscale(self, x):
         return self.function(x) / self.yscale.value
 

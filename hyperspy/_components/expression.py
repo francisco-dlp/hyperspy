@@ -444,6 +444,287 @@ class Expression(Component):
 
     function_nd.__doc__ %= FUNCTION_ND_DOCSTRING
 
+    def integrate_nd(
+        self, limits, variable="x", method="auto", parameters_values=None, **kwargs
+    ):
+        """
+        Integrate the expression over multiple parameter sets simultaneously.
+
+        This method efficiently computes the integral for multidimensional navigation
+        arrays of parameters, similar to function_nd. It attempts symbolic integration
+        when available, falling back to numerical integration.
+
+        Parameters
+        ----------
+        limits : tuple or list of tuples
+            Integration limits for the variable(s). For single variable: (a, b).
+            For double integration: [(a1, b1), (a2, b2)] corresponding to variable order.
+        variable : str or tuple, default 'x'
+            Variable(s) to integrate with respect to. For 1D components: 'x'.
+            For 2D components: 'x', 'y', or ('x', 'y') for double integration.
+        method : str, default 'auto'
+            Integration method to use:
+
+            * 'auto' : try symbolic first, fallback to numerical
+            * 'symbolic' : use only symbolic integration
+            * 'numerical' : use only numerical integration
+        parameters_values : list, optional
+            List of parameter arrays for multidimensional navigation. If None,
+            uses the parameter maps. Each array should match the navigation shape.
+        **kwargs
+            Additional keyword arguments passed to the integration methods.
+
+        Returns
+        -------
+        numpy.ndarray
+            Integration results with shape matching the navigation dimensions.
+            For single parameter set, returns a scalar.
+
+        Examples
+        --------
+        >>> # Create expression with navigation-dependent parameters
+        >>> expr = hs.model.components1D.Expression('a*x + b', name='linear')
+        >>> # Integration with parameter arrays
+        >>> a_values = np.array([1.0, 2.0, 3.0])
+        >>> b_values = np.array([0.0, 1.0, 2.0])
+        >>> results = expr.integrate_nd((0, 2), parameters_values=[a_values, b_values])
+        """
+        # Validate method
+        valid_methods = {"auto", "symbolic", "numerical"}
+        if method not in valid_methods:
+            raise ValueError(f"Invalid method '{method}'. Supported: {valid_methods}")
+
+        # Use provided parameter values or get from parameter maps
+        if parameters_values is None:
+            if self._is_navigation_multidimensional:
+                try:
+                    parameters_values = [p.map["values"] for p in self.parameters]
+                except (TypeError, AttributeError):
+                    raise RuntimeError(
+                        "Parameter maps must be set for multidimensional integration. "
+                        "Use function_nd first or provide parameters_values explicitly."
+                    )
+            else:
+                # Single parameter case - use regular integrate method
+                return self.integrate(limits, variable, method, **kwargs)
+
+        # Check if symbolic integration is available and requested
+        symbolic_available = (
+            hasattr(self, "_symbolic_integration_available")
+            and self._symbolic_integration_available
+        )
+
+        if method == "symbolic" and not symbolic_available:
+            raise NotImplementedError(
+                "Symbolic integration is not available. "
+                "Enable it with compute_integrals=True when creating the Expression component."
+            )
+
+        # Try symbolic integration first if available and requested
+        if method in ("auto", "symbolic") and symbolic_available:
+            try:
+                return self._integrate_symbolic_nd(
+                    limits, variable, parameters_values, **kwargs
+                )
+            except Exception as e:
+                if method == "symbolic":
+                    raise NotImplementedError(f"Symbolic integration failed: {e}")
+                # Fall through to numerical for 'auto'
+
+        # Use numerical integration
+        if method in ("auto", "numerical"):
+            return self._integrate_numerical_nd(
+                limits, variable, parameters_values, **kwargs
+            )
+
+        raise RuntimeError(f"Integration failed for method '{method}'")
+
+    def _integrate_symbolic_nd(self, limits, variable, parameters_values, **kwargs):
+        """Perform symbolic integration for multidimensional parameter arrays."""
+        # Handle single variable integration
+        if isinstance(variable, str):
+            if variable not in ("x", "y"):
+                raise ValueError(f"Unsupported variable '{variable}'. Use 'x' or 'y'.")
+
+            if variable == "y" and not self._is2D:
+                raise ValueError("Variable 'y' is only valid for 2D components")
+
+            if not isinstance(limits, tuple) or len(limits) != 2:
+                raise ValueError("For single variable, limits must be a tuple (a, b)")
+
+            return self._integrate_symbolic_single_nd(
+                limits, variable, parameters_values, **kwargs
+            )
+
+        # Handle double integration (more complex - would need careful implementation)
+        elif isinstance(variable, tuple):
+            # For now, fall back to element-wise computation for double integration
+            # This could be optimized in the future
+            nav_shape = parameters_values[0].shape
+            results = np.zeros(nav_shape)
+
+            for idx in np.ndindex(nav_shape):
+                param_vals = [p[idx] for p in parameters_values]
+                results[idx] = self._integrate_symbolic_double(
+                    limits, variable, param_vals, **kwargs
+                )
+
+            return results
+        else:
+            raise ValueError("Variable must be a string or tuple of strings")
+
+    def _integrate_symbolic_single_nd(
+        self, limits, variable, parameters_values, **kwargs
+    ):
+        """Perform symbolic single variable integration for parameter arrays."""
+        # Get the symbolic integral function
+        integral_func = getattr(self, f"_integral_{variable}_func", None)
+        if integral_func is None:
+            raise RuntimeError(
+                f"Symbolic integral for variable '{variable}' not available"
+            )
+
+        lower, upper = limits
+        nav_shape = parameters_values[0].shape
+
+        # For 2D components integrating over one variable, handle fixed values
+        if self._is2D:
+            other_var = "y" if variable == "x" else "x"
+            if other_var in kwargs:
+                other_val = kwargs[other_var]
+
+                # Initialize results array
+                results = np.zeros(nav_shape)
+
+                # Compute for each navigation position
+                for idx in np.ndindex(nav_shape):
+                    param_vals = [p[idx] for p in parameters_values]
+
+                    if variable == "x":
+                        upper_val = integral_func(upper, other_val, *param_vals)
+                        lower_val = integral_func(lower, other_val, *param_vals)
+                    else:  # variable == "y"
+                        upper_val = integral_func(other_val, upper, *param_vals)
+                        lower_val = integral_func(other_val, lower, *param_vals)
+
+                    results[idx] = float(upper_val - lower_val)
+
+                return results
+            else:
+                raise ValueError(
+                    f"For 2D component integration over '{variable}', "
+                    f"must provide '{other_var}' value as keyword argument"
+                )
+        else:
+            # 1D component - vectorized computation
+            results = np.zeros(nav_shape)
+
+            for idx in np.ndindex(nav_shape):
+                param_vals = [p[idx] for p in parameters_values]
+                upper_val = integral_func(upper, *param_vals)
+                lower_val = integral_func(lower, *param_vals)
+                results[idx] = float(upper_val - lower_val)
+
+            return results
+
+    def _integrate_numerical_nd(self, limits, variable, parameters_values, **kwargs):
+        """Perform numerical integration for multidimensional parameter arrays."""
+        from scipy.integrate import dblquad, quad
+
+        nav_shape = parameters_values[0].shape
+        results = np.zeros(nav_shape)
+
+        # Store original parameter values
+        original_values = [p.value for p in self.parameters]
+
+        try:
+            # Compute integration for each navigation position
+            for idx in np.ndindex(nav_shape):
+                # Set parameter values for this navigation position
+                param_vals = [p[idx] for p in parameters_values]
+                for param, value in zip(self.parameters, param_vals):
+                    param.value = value
+
+                # Perform integration using existing single-point method
+                if isinstance(variable, str):
+                    if not isinstance(limits, tuple) or len(limits) != 2:
+                        raise ValueError(
+                            "For single variable, limits must be a tuple (a, b)"
+                        )
+
+                    a, b = limits
+
+                    if variable == "x":
+                        if self._is2D and "y" in kwargs:
+                            y_fixed = kwargs["y"]
+
+                            def integrand(x_val):
+                                return self.function(x_val, y_fixed)
+                        elif not self._is2D:
+
+                            def integrand(x_val):
+                                return self.function(x_val)
+                        else:
+                            raise ValueError(
+                                "For 2D component integration over 'x', must provide 'y' value"
+                            )
+
+                        results[idx], _ = quad(integrand, a, b)
+
+                    elif variable == "y":
+                        if not self._is2D:
+                            raise ValueError(
+                                "Variable 'y' is only valid for 2D components"
+                            )
+                        if "x" not in kwargs:
+                            raise ValueError(
+                                "For 2D component integration over 'y', must provide 'x' value"
+                            )
+
+                        x_fixed = kwargs["x"]
+
+                        def integrand(y_val):
+                            return self.function(x_fixed, y_val)
+
+                        results[idx], _ = quad(integrand, a, b)
+                    else:
+                        raise ValueError(
+                            f"Unsupported variable '{variable}'. Use 'x' or 'y'."
+                        )
+
+                elif isinstance(variable, tuple):
+                    # Double integration
+                    if len(variable) != 2 or set(variable) != {"x", "y"}:
+                        raise ValueError(
+                            "For double integration, variables must be ('x', 'y')"
+                        )
+                    if not self._is2D:
+                        raise ValueError(
+                            "Double integration is only available for 2D components"
+                        )
+
+                    x_limits, y_limits = limits
+
+                    def integrand(y_val, x_val):
+                        return self.function(x_val, y_val)
+
+                    results[idx] = dblquad(
+                        integrand,
+                        x_limits[0],
+                        x_limits[1],  # x integration limits
+                        y_limits[0],
+                        y_limits[1],  # y integration limits
+                    )[0]
+                else:
+                    raise ValueError("Variable must be a string or tuple of strings")
+
+        finally:
+            # Restore original parameter values
+            for param, original_value in zip(self.parameters, original_values):
+                param.value = original_value
+
+        return results
+
     @property
     def _constant_term(self):
         """

@@ -146,6 +146,75 @@ class Offset(Component):
 
     function_nd.__doc__ %= FUNCTION_ND_DOCSTRING
 
+    def integrate_nd(
+        self,
+        limits,
+        variable="x",
+        method="analytical",
+        parameters_values=None,
+        **kwargs,
+    ):
+        """
+        Analytical integration of the constant offset function over multiple parameter sets.
+
+        This method efficiently computes the integral for multidimensional navigation
+        arrays of parameters, similar to function_nd. For a constant function f(x) = k,
+        the integral from a to b is k × (b - a).
+
+        Parameters
+        ----------
+        limits : tuple
+            Integration limits (a, b) where a and b are the lower and upper bounds.
+        variable : str, default 'x'
+            Integration variable (ignored for constant function, included for API compatibility).
+        method : str, default 'analytical'
+            Integration method (ignored for constant function, included for API compatibility).
+        parameters_values : list, optional
+            List of parameter arrays for multidimensional navigation. If None,
+            uses the parameter maps. For Offset, should contain one array: [offset_values].
+        **kwargs
+            Additional arguments (ignored, included for API compatibility).
+
+        Returns
+        -------
+        numpy.ndarray
+            The integration results with shape matching the navigation dimensions.
+            For single parameter set, returns a scalar.
+
+        Examples
+        --------
+        >>> offset = hs.model.components1D.Offset(offset=5.0)
+        >>> # Standard integration
+        >>> result = offset.integrate_nd((0, 2))
+        >>> # Integration with parameter arrays
+        >>> offset_values = np.array([1.0, 2.0, 3.0])
+        >>> results = offset.integrate_nd((0, 2), parameters_values=[offset_values])
+        """
+        if not isinstance(limits, tuple) or len(limits) != 2:
+            raise ValueError("limits must be a tuple of length 2: (a, b)")
+
+        a, b = limits
+        interval_length = b - a
+
+        # Use provided parameter values or get from parameter maps
+        if parameters_values is None:
+            if self._is_navigation_multidimensional:
+                parameters_values = [self.offset.map["values"]]
+            else:
+                # Single parameter case
+                return self.offset.value * interval_length
+
+        # Handle multidimensional navigation case
+        if len(parameters_values) != 1:
+            raise ValueError(
+                f"Expected 1 parameter array, got {len(parameters_values)}"
+            )
+
+        offset_values = parameters_values[0]
+
+        # For constant function f(x) = k, integral from a to b is k * (b - a)
+        return offset_values * interval_length
+
     def integrate(
         self,
         limits,

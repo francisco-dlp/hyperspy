@@ -343,16 +343,25 @@ class TestExpressionIntegration:
         with pytest.raises(ValueError, match="variables must be 'x' and 'y'"):
             expr_2d.integrate([(0, 1), (0, 2)], variable=("x", "z"))
 
-    def test_integrate_nd_not_implemented(self):
-        """Test that integrate_nd raises NotImplementedError."""
+    def test_integrate_nd_basic_functionality(self):
+        """Test that integrate_nd works for basic expressions."""
         expr = Expression(
-            expression="x",
+            expression="a*x",
             name="Linear",
             compute_integrals=True,
         )
+        expr.a.value = 1.0  # Set parameter value
 
-        with pytest.raises(NotImplementedError, match="Navigation-aware integration"):
-            expr.integrate_nd((0, 1))
+        # Test single integration
+        result = expr.integrate_nd((0, 1))
+        expected = 0.5  # integral of a*x from 0 to 1 with a=1 is 0.5
+        assert np.isclose(result, expected), f"Expected {expected}, got {result}"
+
+        # Test with different parameter value
+        expr.a.value = 2.0
+        result = expr.integrate_nd((0, 1))
+        expected = 1.0  # integral of 2*x from 0 to 1 is 1.0
+        assert np.isclose(result, expected), f"Expected {expected}, got {result}"
 
 
 class TestExpressionIntegrationAdvanced:

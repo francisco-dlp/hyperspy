@@ -159,3 +159,23 @@ class TestOffset:
             analytical = o.integrate(limits)
             numerical = Component.integrate(o, limits)
             np.testing.assert_allclose(analytical, numerical, rtol=1e-12)
+
+    def test_integrate_nd_basic_functionality(self):
+        """Test integrate_nd method for navigation-aware integration."""
+        o = hs.model.components1D.Offset(offset=2.0)
+
+        # Test single parameter value
+        result = o.integrate_nd((0, 3))
+        expected = 6.0  # 2.0 * (3 - 0)
+        assert np.isclose(result, expected), f"Expected {expected}, got {result}"
+
+        # Test different parameter value
+        o.offset.value = 3.0
+        result = o.integrate_nd((1, 4))
+        expected = 9.0  # 3.0 * (4 - 1)
+        assert np.isclose(result, expected), f"Expected {expected}, got {result}"
+
+        # Test negative range
+        result = o.integrate_nd((-1, 2))
+        expected = 9.0  # 3.0 * (2 - (-1))
+        assert np.isclose(result, expected), f"Expected {expected}, got {result}"
