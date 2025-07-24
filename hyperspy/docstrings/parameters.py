@@ -25,3 +25,43 @@ FUNCTION_ND_DOCSTRING = """parameters_values : list, None, optional
             If ``None``, the parameters values for all navigation positions
             are considered. The default is None.
         """
+
+INTEGRATION_PARAMETERS_DOCSTRING = """        limits : tuple or list of tuples
+            Integration limits for the variable(s). For single variable: (a, b).
+            For double integration: [(a1, b1), (a2, b2)] corresponding to variable
+            order.
+        variable : str or tuple, default 'x'
+            Variable(s) to integrate with respect to. For 1D components: 'x'.
+            For 2D components: 'x', 'y', or ('x', 'y') for double integration.
+            When integrating 2D components over single variables, fixed variable
+            values must be provided as keyword arguments (e.g., y=1.0 when
+            integrating over x).
+        method : str, default 'numerical'
+            Integration method to use:
+
+            * 'auto' : automatically select best available method (falls back to
+              'numerical')
+            * 'numerical' : use scipy.integrate.quad/dblquad for numerical
+              integration
+            * 'symbolic' : analytical integration (raises NotImplementedError for
+              base Component)
+        **kwargs
+            Additional keyword arguments:
+
+            * For marginal integration of 2D components: fixed variable values (e.g., y=1.0)
+            * For scipy.integrate: additional integration options (epsabs, epsrel, etc.)"""
+
+INTEGRATION_ND_PARAMETERS_DOCSTRING = """        limits : tuple or list of tuples
+            Integration limits for the variable(s). For single variable: (a, b).
+            For double integration: [(a1, b1), (a2, b2)] corresponding to variable order.
+        variable : str or tuple, default 'x'
+            Variable(s) to integrate with respect to. For 1D components: 'x'.
+            For 2D components: 'x', 'y', or ('x', 'y') for double integration.
+        method : str, default 'numerical'
+            Integration method to use:
+
+            * 'auto' : automatically select best available method (falls back to 'numerical')
+            * 'numerical' : use scipy.integrate.quad/dblquad for numerical integration
+            * 'symbolic' : analytical integration (raises NotImplementedError for base Component)
+        **kwargs
+            Additional keyword arguments passed to the integration backend."""

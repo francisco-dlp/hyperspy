@@ -27,6 +27,10 @@ from rsciio.utils.tools import append2pathname, incremental_filename
 from sympy.utilities.lambdify import lambdify
 from traits.trait_numeric import Array
 
+from hyperspy.docstrings.parameters import (
+    INTEGRATION_ND_PARAMETERS_DOCSTRING,
+    INTEGRATION_PARAMETERS_DOCSTRING,
+)
 from hyperspy.events import Event, Events
 from hyperspy.misc.export_dictionary import (
     export_to_dictionary,
@@ -1369,6 +1373,258 @@ class Component(t.HasTraits):
         """
         display(CurrentComponentValues(self, only_free=only_free))
 
+    def integrate(self, limits, variable="x", method="numerical", **kwargs):
+        """
+        Integrate the component with respect to the specified variable.
+
+        This method provides numerical integration for all components using
+        scipy.integrate.quad. Individual component classes may override
+        this method for optimized implementations.
+
+        %s
+
+        Returns
+        -------
+        float or numpy.ndarray
+            Definite integral result. Returns a scalar for single values or
+            an array when the fixed variable in 2D integration is an array.
+
+        Raises
+        ------
+        NotImplementedError
+            If the component doesn't implement the `function` method required
+            for numerical integration.
+        ValueError
+            If limits or variable parameters are invalid, or if required
+            fixed variable values are not provided for 2D components.
+
+        Examples
+        --------
+        1D component integration:
+
+        >>> result = component.integrate((0, 10), variable='x')
+        >>> # Using different methods (all equivalent for base Component)
+        >>> result = component.integrate((0, 10), variable='x', method='numerical')
+        >>> result = component.integrate((0, 10), variable='x', method='auto')
+
+        2D component double integration:
+
+        >>> result = component.integrate([(0, 10), (-1, 1)], variable=('x', 'y'))
+
+        2D component single variable integration (marginal integration):
+
+        >>> # Integrate over x while fixing y=0.5
+        >>> result = component.integrate((0, 10), variable='x', y=0.5)
+        >>> # Integrate over y while fixing x=1.0
+        >>> result = component.integrate((-1, 1), variable='y', x=1.0)
+        >>> # Integrate over x for multiple y values
+        >>> import numpy as np
+        >>> y_values = np.array([0.5, 1.0, 1.5])
+        >>> results = component.integrate((0, 10), variable='x', y=y_values)
+        """
+        # Import here to avoid circular imports
+        from scipy.integrate import dblquad, quad
+
+        # Validate method parameter
+        valid_methods = {"auto", "numerical", "symbolic"}
+        if method not in valid_methods:
+            raise ValueError(
+                f"Invalid method '{method}'. Supported methods: {valid_methods}"
+            )
+
+        # Handle method selection
+        if method == "symbolic":
+            raise NotImplementedError(
+                f"Symbolic integration is not implemented for "
+                f"{self.__class__.__name__}. Use 'numerical' or 'auto' method instead."
+            )
+        elif method == "auto":
+            # For base Component, auto falls back to numerical
+            method = "numerical"
+
+        if not hasattr(self, "function"):
+            raise NotImplementedError(
+                f"Component {self.__class__.__name__} does not implement the "
+                "'function' method required for numerical integration. "
+                "Only components with function() method "
+                "support integration."
+            )
+
+        # Validate inputs
+        if isinstance(variable, tuple):
+            if len(variable) != 2:
+                raise ValueError(
+                    "For double integration, variable must be a tuple of exactly "
+                    "2 elements"
+                )
+            if not isinstance(limits, (list, tuple)) or len(limits) != 2:
+                raise ValueError(
+                    "For double integration, limits must be a list/tuple of 2 tuples"
+                )
+
+            # Check that each element in limits is a tuple/list
+            try:
+                x_limits, y_limits = limits
+                if not isinstance(x_limits, (list, tuple)) or not isinstance(
+                    y_limits, (list, tuple)
+                ):
+                    raise ValueError(
+                        "For double integration, limits must be a list/tuple of "
+                        "2 tuples"
+                    )
+                if len(x_limits) != 2 or len(y_limits) != 2:
+                    raise ValueError(
+                        "For double integration, each limit tuple must contain "
+                        "exactly 2 elements"
+                    )
+            except (ValueError, TypeError):
+                raise ValueError(
+                    "For double integration, limits must be a list/tuple of 2 tuples"
+                )
+
+            # Double integration
+            var_x, var_y = variable
+            if var_x not in ["x"] or var_y not in ["y"]:
+                raise ValueError("For 2D integration, variables must be 'x' and 'y'")
+
+            # Create integrand function for double integration
+            def integrand(y_val, x_val):
+                return self.function(x_val, y_val)
+
+            result = dblquad(
+                integrand,
+                x_limits[0],
+                x_limits[1],  # x integration limits
+                y_limits[0],
+                y_limits[1],  # y integration limits
+            )[0]
+            return result
+
+        else:
+            # Single variable integration
+            if not isinstance(limits, tuple) or len(limits) != 2:
+                raise ValueError(
+                    "For single variable integration, limits must be a tuple (a, b)"
+                )
+
+            a, b = limits
+
+            if variable == "x":
+                # For 1D components or integrating 2D component w.r.t. x
+                is_2d_component = (
+                    hasattr(self, "_axes_manager")
+                    and self._axes_manager is not None
+                    and hasattr(self._axes_manager, "signal_dimension")
+                    and self._axes_manager.signal_dimension == 2
+                ) or (hasattr(self, "_is2D") and self._is2D)
+
+                if is_2d_component:
+                    # For 2D components, we need to provide both x and y
+                    # This creates a function of x only by fixing y (marginal
+                    # integration)
+                    if "y" not in kwargs:
+                        raise ValueError(
+                            "For 2D component integration over 'x', must provide "
+                            "'y' value as keyword argument"
+                        )
+                    y_fixed = kwargs["y"]
+
+                    if np.isscalar(y_fixed):
+                        # Single y value - return scalar result
+                        def integrand(x_val):
+                            return self.function(x_val, y_fixed)
+
+                        result, _ = quad(integrand, a, b)
+                        return result
+                    else:
+                        # Array of y values - return array of results
+                        y_array = np.asarray(y_fixed)
+                        results = np.zeros_like(y_array, dtype=float)
+
+                        for i, y_val in enumerate(y_array.flat):
+
+                            def integrand(x_val):
+                                return self.function(x_val, y_val)
+
+                            results.flat[i], _ = quad(integrand, a, b)
+
+                        return results.reshape(y_array.shape)
+                else:
+                    # 1D component
+                    def integrand(x_val):
+                        return self.function(x_val)
+
+                    result, _ = quad(integrand, a, b)
+                    return result
+
+            elif variable == "y":
+                is_2d_component = (
+                    hasattr(self, "_axes_manager")
+                    and self._axes_manager is not None
+                    and hasattr(self._axes_manager, "signal_dimension")
+                    and self._axes_manager.signal_dimension == 2
+                ) or (hasattr(self, "_is2D") and self._is2D)
+
+                if not is_2d_component:
+                    raise ValueError("Variable 'y' is only valid for 2D components")
+
+                if "x" not in kwargs:
+                    raise ValueError(
+                        "For 2D component integration over 'y', must provide "
+                        "'x' value as keyword argument"
+                    )
+                x_fixed = kwargs["x"]
+
+                if np.isscalar(x_fixed):
+                    # Single x value - return scalar result
+                    def integrand(y_val):
+                        return self.function(x_fixed, y_val)
+
+                    result, _ = quad(integrand, a, b)
+                    return result
+                else:
+                    # Array of x values - return array of results
+                    x_array = np.asarray(x_fixed)
+                    results = np.zeros_like(x_array, dtype=float)
+
+                    for i, x_val in enumerate(x_array.flat):
+
+                        def integrand(y_val):
+                            return self.function(x_val, y_val)
+
+                        results.flat[i], _ = quad(integrand, a, b)
+
+                    return results.reshape(x_array.shape)
+            else:
+                raise ValueError(
+                    f"Unsupported variable: {variable}. Use 'x', 'y', or ('x', 'y')"
+                )
+
+    def integrate_nd(self, limits, variable="x", method="numerical", **kwargs):
+        """
+        Integrate across navigation dimensions (similar to function_nd).
+
+        This method performs integration over the specified variable for each
+        navigation point. Navigation-aware integration is not yet implemented
+        for the base Component class.
+
+        %s
+
+        Returns
+        -------
+        numpy.ndarray
+            Array of integration results with shape matching navigation dimensions.
+
+        Raises
+        ------
+        NotImplementedError
+            Navigation-aware integration is not implemented for base Component.
+        """
+        raise NotImplementedError(
+            "Navigation-aware integration is not implemented for base Component. "
+            "Use integrate() method for current navigation point."
+        )
+
     @property
     def _constant_term(self):
         """
@@ -1376,6 +1632,11 @@ class Component(t.HasTraits):
         Returns 0 for most components.
         """
         return 0
+
+
+# Apply dynamic docstring interpolation following HyperSpy patterns
+Component.integrate.__doc__ %= INTEGRATION_PARAMETERS_DOCSTRING
+Component.integrate_nd.__doc__ %= INTEGRATION_ND_PARAMETERS_DOCSTRING
 
 
 def _get_scaling_factor(signal, axis, parameter):

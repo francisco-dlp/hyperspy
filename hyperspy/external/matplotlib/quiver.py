@@ -2,7 +2,6 @@ import matplotlib.collections as mcollections
 from matplotlib import transforms
 import matplotlib.artist as martist
 import hyperspy.external.matplotlib._api as _api
-from matplotlib import cbook
 import math
 
 import numpy as np

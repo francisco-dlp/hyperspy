@@ -1,4 +1,3 @@
-import inspect
 
 
 def nargs_error(name, takes, given):
