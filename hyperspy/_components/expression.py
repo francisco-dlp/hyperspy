@@ -172,6 +172,7 @@ class Expression(Component):
         rotation_center=None,
         rename_pars={},
         compute_gradients=True,
+        compute_integrals=False,
         linear_parameter_list=None,
         check_parameter_linearity=True,
         **kwargs,
@@ -198,6 +199,7 @@ class Expression(Component):
         # it is useful to have the inverse mapping
         self._rename_pars_inv = {v: k for k, v in self._rename_pars.items()}
         self._compute_gradients = compute_gradients
+        self._compute_integrals = compute_integrals
 
         if rotation_center is None:
             self.compile_function(module=module, position=position)
@@ -351,6 +353,44 @@ class Expression(Component):
                 warnings.warn(
                     "The gradients can not be computed with sympy.", UserWarning
                 )
+
+        # Compute symbolic integrals
+        if self._compute_integrals:
+            try:
+                # Use the actual symbols x and y instead of variables list
+                var_symbols = [x] if not self._is2D else [x, y]
+
+                # Create integral functions for each variable
+                for var in var_symbols:
+                    var_name = var.name
+                    # Create integral function for this variable - use self._parsed_expr
+                    integral_expr = sympy.integrate(self._parsed_expr, var)
+
+                    # Create a lambda function that evaluates the indefinite integral
+                    f_integral = sympy.lambdify(
+                        var_symbols + parameters,
+                        integral_expr,
+                        modules=module,
+                        dummify=False,
+                    )
+
+                    # Store the symbolic integral and lambda function
+                    setattr(self, f"_integral_{var_name}_expr", integral_expr)
+                    setattr(self, f"_integral_{var_name}_func", f_integral)
+
+                # Set flag to indicate symbolic integration is available
+                self._symbolic_integration_available = True
+
+            except (SyntaxError, AttributeError, NotImplementedError) as e:
+                warnings.warn(
+                    f"Symbolic integrals cannot be computed with sympy: {e}. "
+                    "Integration will fall back to numerical methods.",
+                    UserWarning,
+                )
+                # Set flag to indicate symbolic integration failed
+                self._symbolic_integration_available = False
+        else:
+            self._symbolic_integration_available = False
 
     def function_nd(self, *args, parameters_values=None):
         """
@@ -507,6 +547,200 @@ class Expression(Component):
                 data = np.moveaxis(data[slice_], 0, -1)
 
         return data
+
+    def integrate(self, limits, variable="x", method="auto", **kwargs):
+        """
+        Integrate the expression symbolically or numerically.
+
+        This method first attempts symbolic integration when available and the
+        method is 'auto' or 'symbolic'. If symbolic integration is not available
+        or fails, it falls back to numerical integration using the parent
+        Component class's integration method.
+
+        Parameters
+        ----------
+        limits : tuple or list of tuples
+            Integration limits for the variable(s). For single variable: (a, b).
+            For double integration: [(a1, b1), (a2, b2)] corresponding to variable
+            order.
+        variable : str or tuple, default 'x'
+            Variable(s) to integrate with respect to. For 1D components: 'x'.
+            For 2D components: 'x', 'y', or ('x', 'y') for double integration.
+            When integrating 2D components over single variables, fixed variable
+            values must be provided as keyword arguments (e.g., y=1.0 when
+            integrating over x).
+        method : str, default 'auto'
+            Integration method to use:
+
+            * 'auto' : try symbolic first, fallback to numerical
+            * 'symbolic' : use only symbolic integration
+            * 'numerical' : use only numerical integration
+        **kwargs
+            Additional keyword arguments passed to the integration methods.
+
+        Returns
+        -------
+        float or numpy.ndarray
+            Integration result.
+
+        Raises
+        ------
+        ValueError
+            If invalid variable, method, or limits are provided.
+        NotImplementedError
+            If symbolic integration fails and method='symbolic', or if symbolic
+            integration is not available when method='symbolic' is specified.
+        RuntimeError
+            If integration computation fails.
+
+        Examples
+        --------
+        >>> # Create a polynomial expression
+        >>> poly = hs.model.components1D.Expression(
+        ...     expression="a * x**2 + b * x + c",
+        ...     name="Polynomial",
+        ...     a=1.0, b=2.0, c=3.0
+        ... )
+        >>> # Integrate from 0 to 2 (uses numerical integration by default)
+        >>> result = poly.integrate((0, 2))
+        >>>
+        >>> # Enable symbolic integration for faster computation
+        >>> poly_symbolic = hs.model.components1D.Expression(
+        ...     expression="a * x**2 + b * x + c",
+        ...     name="Polynomial",
+        ...     a=1.0, b=2.0, c=3.0,
+        ...     compute_integrals=True
+        ... )
+        >>> # This will use symbolic integration
+        >>> result = poly_symbolic.integrate((0, 2), method='auto')
+        >>> # Force numerical integration
+        >>> result = poly_symbolic.integrate((0, 2), method='numerical')
+        """
+        # Validate method
+        valid_methods = {"auto", "symbolic", "numerical"}
+        if method not in valid_methods:
+            raise ValueError(f"Invalid method '{method}'. Supported: {valid_methods}")
+
+        # Check if symbolic integration is requested but not available
+        symbolic_available = (
+            hasattr(self, "_symbolic_integration_available")
+            and self._symbolic_integration_available
+        )
+
+        if method == "symbolic" and not symbolic_available:
+            raise NotImplementedError(
+                "Symbolic integration is not available. "
+                "Enable it with compute_integrals=True when creating the Expression component."
+            )
+
+        # Try symbolic integration first if available and requested
+        if method in ("auto", "symbolic") and symbolic_available:
+            try:
+                return self._integrate_symbolic(limits, variable, **kwargs)
+            except Exception as e:
+                if method == "symbolic":
+                    raise NotImplementedError(f"Symbolic integration failed: {e}")
+                # Fall through to numerical for 'auto'
+
+        # Use numerical integration from parent Component class
+        if method in ("auto", "numerical"):
+            return super().integrate(limits, variable, **kwargs)
+
+        raise RuntimeError(f"Integration failed for method '{method}'")
+
+    def _integrate_symbolic(self, limits, variable, **kwargs):
+        """Perform symbolic integration using the precomputed integrals."""
+        # Handle single variable integration
+        if isinstance(variable, str):
+            if variable not in ("x", "y"):
+                raise ValueError(f"Unsupported variable '{variable}'. Use 'x' or 'y'.")
+
+            if variable == "y" and not self._is2D:
+                raise ValueError("Variable 'y' is only valid for 2D components")
+
+            if not isinstance(limits, tuple) or len(limits) != 2:
+                raise ValueError("For single variable, limits must be a tuple (a, b)")
+
+            return self._integrate_symbolic_single(limits, variable, **kwargs)
+
+        # Handle double integration
+        elif isinstance(variable, tuple):
+            if len(variable) != 2:
+                raise ValueError(
+                    "For double integration, variable must be a tuple of exactly 2 elements"
+                )
+
+            if not self._is2D:
+                raise ValueError(
+                    "Double integration is only available for 2D components"
+                )
+
+            if set(variable) != {"x", "y"}:
+                raise ValueError(
+                    "For double integration, variables must be 'x' and 'y'"
+                )
+
+            if not isinstance(limits, (list, tuple)) or len(limits) != 2:
+                raise ValueError(
+                    "For double integration, limits must be a list/tuple of 2 tuples"
+                )
+
+            return self._integrate_symbolic_double(limits, variable, **kwargs)
+
+        else:
+            raise ValueError("Variable must be a string or tuple of strings")
+
+    def _integrate_symbolic_single(self, limits, variable, **kwargs):
+        """Perform symbolic single variable integration."""
+        # Get the symbolic integral function
+        integral_func = getattr(self, f"_integral_{variable}_func", None)
+        if integral_func is None:
+            raise RuntimeError(
+                f"Symbolic integral for variable '{variable}' not available"
+            )
+
+        # For 2D components integrating over one variable, substitute fixed values
+        if self._is2D:
+            other_var = "y" if variable == "x" else "x"
+            if other_var in kwargs:
+                other_val = kwargs[other_var]
+
+                # Evaluate definite integral using fundamental theorem of calculus
+                lower, upper = limits
+
+                # Get parameter values
+                param_values = [p.value for p in self.parameters]
+
+                if variable == "x" and other_var == "y":
+                    upper_val = integral_func(upper, other_val, *param_values)
+                    lower_val = integral_func(lower, other_val, *param_values)
+                else:  # variable == "y" and other_var == "x"
+                    upper_val = integral_func(other_val, upper, *param_values)
+                    lower_val = integral_func(other_val, lower, *param_values)
+
+                return float(upper_val - lower_val)
+            else:
+                raise ValueError(
+                    f"For 2D component integration over '{variable}', "
+                    f"must provide '{other_var}' value as keyword argument"
+                )
+        else:
+            # 1D component
+            lower, upper = limits
+            param_values = [p.value for p in self.parameters]
+
+            upper_val = integral_func(upper, *param_values)
+            lower_val = integral_func(lower, *param_values)
+
+            return float(upper_val - lower_val)
+
+    def _integrate_symbolic_double(self, limits, variable, **kwargs):
+        """Perform symbolic double integration."""
+        # This is more complex and would require computing the double integral symbolically
+        # For now, fall back to numerical integration
+        raise NotImplementedError(
+            "Symbolic double integration not yet implemented. Use method='numerical'"
+        )
 
 
 def _check_parameter_linearity(expr, name):
