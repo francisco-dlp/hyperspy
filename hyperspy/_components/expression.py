@@ -830,7 +830,7 @@ class Expression(Component):
         return data
 
     def integrate(
-        self, limits, variable="x", method="auto", parameters_values=None, **kwargs
+        self, limits=None, variable="x", method="auto", parameters_values=None, **kwargs
     ):
         """Integrate the expression symbolically or numerically.
 
@@ -839,18 +839,23 @@ class Expression(Component):
         or fails, it falls back to numerical integration using the parent
         Component class's integration method.
 
-        Supports both fixed and variable integration limits for navigation-aware
-        integration across multiple parameter sets.
+        Supports both definite and indefinite integration, as well as fixed and
+        variable integration limits for navigation-aware integration across
+        multiple parameter sets.
 
         Parameters
         ----------
-        limits : tuple, array-like, or tuple of array-like
+        limits : tuple, array-like, tuple of array-like, or None, default None
             Integration limits. Can be:
 
+            * None : Indefinite integration (returns symbolic expression)
             * (a, b) : Fixed limits for all navigation positions
             * (a_array, b_array) : Variable limits with arrays matching navigation dimensions
             * array of (a, b) tuples : Variable limits for each navigation position
             * For double integration: [(a1, b1), (a2, b2)] where each can be fixed or variable
+
+            When limits=None, symbolic indefinite integration is performed when
+            available, returning a symbolic expression or lambda function.
         variable : str or tuple, default 'x'
             Variable(s) to integrate with respect to. For 1D components: 'x'.
             For 2D components: 'x', 'y', or ('x', 'y') for double integration.
@@ -860,9 +865,9 @@ class Expression(Component):
         method : str, default 'auto'
             Integration method to use:
 
-            * 'auto' : try symbolic first, fallback to numerical
+            * 'auto' : try symbolic first, fallback to numerical (for definite) or error (for indefinite)
             * 'symbolic' : use only symbolic integration
-            * 'numerical' : use only numerical integration
+            * 'numerical' : use only numerical integration (not available for indefinite)
         parameters_values : list or None, optional
             List of parameters values used to calculate the component.
             The order of the parameter in the list is defined in the
@@ -874,9 +879,11 @@ class Expression(Component):
 
         Returns
         -------
-        float or numpy.ndarray
-            Integration result. Returns scalar for fixed limits, or array matching
-            navigation dimensions for variable limits.
+        float, numpy.ndarray, or callable
+            For definite integration: Integration result as scalar for fixed limits,
+            or array matching navigation dimensions for variable limits.
+            For indefinite integration (limits=None): Returns a lambda function
+            that can evaluate the indefinite integral at any point.
 
         Raises
         ------
@@ -946,7 +953,29 @@ class Expression(Component):
         Runtime parameter substitution for Expression components:
 
         >>> result = poly.integrate((0, 2), parameters_values=[2.0, 1.0, 0.5])
+
+        Indefinite integration (returns a lambda function):
+
+        >>> indefinite_poly = hs.model.components1D.Expression(
+        ...     expression="a * x**2 + b * x + c",
+        ...     name="Polynomial",
+        ...     a=1.0, b=2.0, c=3.0,
+        ...     compute_integrals=True
+        ... )
+
+        Get indefinite integral function:
+
+        >>> integral_func = indefinite_poly.integrate(limits=None, method='symbolic')
+        >>> result_at_2 = integral_func(2)  # Evaluate at x=2
+        >>> result_at_0 = integral_func(0)  # Evaluate at x=0
+        >>> definite_result = result_at_2 - result_at_0  # Same as integrate((0, 2))
         """
+        # Handle indefinite integration (limits=None)
+        if limits is None:
+            return self._integrate_indefinite(
+                variable, method, parameters_values, **kwargs
+            )
+
         # Check if we have variable limits first
         nav_shape = getattr(self, "_navigation_shape", None)
         is_variable_limits, parsed_limits = self._parse_limits(limits, nav_shape)
@@ -1402,6 +1431,96 @@ class Expression(Component):
                 param.value = original_value
 
         return results if results.size > 1 else results.item()
+
+    def _integrate_indefinite(
+        self, variable, method="symbolic", parameters_values=None, **kwargs
+    ):
+        """
+        Compute indefinite integral, returning a lambda function.
+
+        Parameters
+        ----------
+        variable : str
+            The variable to integrate over (e.g., 'x', 'y').
+        method : str, default 'symbolic'
+            Integration method. For indefinite integrals, only 'symbolic' is supported.
+        parameters_values : list or None
+            Values to substitute for parameters before integration.
+
+        Returns
+        -------
+        lambda function
+            A function that can be called with variable value(s) to evaluate the indefinite integral.
+
+        Raises
+        ------
+        ValueError
+            If method is not 'symbolic' or if symbolic integration fails.
+        """
+        if method != "symbolic":
+            raise ValueError("Indefinite integration only supports method='symbolic'")
+
+        if not self._compute_integrals:
+            raise ValueError(
+                "compute_integrals must be True for indefinite integration"
+            )
+
+        # Get the SymPy expression
+        try:
+            import sympy
+        except ImportError:
+            raise ImportError("SymPy is required for symbolic indefinite integration")
+
+        # Use provided parameter values or get current values
+        if parameters_values is None:
+            param_values = [p.value for p in self.parameters]
+        else:
+            param_values = parameters_values
+
+        # Get the original parsed expression
+        expr = self._parsed_expr
+
+        # Get the variable symbol
+        var_symbol = None
+        for s in expr.free_symbols:
+            if str(s) == variable:
+                var_symbol = s
+                break
+
+        if var_symbol is None:
+            raise ValueError(f"Variable '{variable}' not found in expression")
+
+        # Compute indefinite integral
+        try:
+            indefinite_integral = sympy.integrate(expr, var_symbol)
+        except Exception as e:
+            raise ValueError(f"Symbolic indefinite integration failed: {e}")
+
+        # Get parameter symbols and substitute values
+        parameter_symbols = []
+        for s in indefinite_integral.free_symbols:
+            if str(s) != variable:
+                parameter_symbols.append(s)
+
+        parameter_symbols.sort(key=lambda s: str(s))  # Keep consistent ordering
+
+        # Substitute parameter values into the indefinite integral
+        substituted_integral = indefinite_integral
+        for param_symbol, param_value in zip(parameter_symbols, param_values):
+            substituted_integral = substituted_integral.subs(param_symbol, param_value)
+
+        # Convert to a callable function
+        def integral_function(value):
+            """Evaluate the indefinite integral at given point."""
+            result = substituted_integral.subs(var_symbol, value)
+            # Handle the SymPy result conversion carefully
+            try:
+                return float(result.evalf())  # type: ignore
+            except AttributeError:
+                # For older SymPy versions or different result types
+                return float(result)  # type: ignore
+
+        return integral_function
 
 
 def _check_parameter_linearity(expr, name):

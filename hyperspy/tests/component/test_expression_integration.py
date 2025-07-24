@@ -858,3 +858,144 @@ class TestExpressionIntegrationLegacy:
         result = expr.integrate((0, 1))
         expected = 2.0  # integral of 2*x + 1 from 0 to 1 = [x^2 + x] = 2
         np.testing.assert_allclose(result, expected, rtol=1e-6)
+
+
+class TestExpressionIndefiniteIntegration:
+    """Tests for indefinite integration functionality in Expression components."""
+
+    def test_indefinite_integration_polynomial(self):
+        """Test indefinite integration of polynomial expressions."""
+        # Create a polynomial: x^2 + 2*x + 3
+        poly = Expression(
+            expression="a * x**2 + b * x + c",
+            name="Polynomial",
+            a=1.0,
+            b=2.0,
+            c=3.0,
+            compute_integrals=True,
+        )
+
+        # Get indefinite integral function
+        integral_func = poly.integrate(limits=None, variable="x", method="symbolic")
+
+        # Test that it returns a callable function
+        assert callable(integral_func), (
+            "Indefinite integration should return a callable function"
+        )
+
+        # Test evaluation at specific points
+        # Indefinite integral of x^2 + 2*x + 3 is (1/3)*x^3 + x^2 + 3*x + C
+        # At x=0: 0 + 0 + 0 + C = C (constant of integration)
+        # At x=2: (1/3)*8 + 4 + 6 + C = 8/3 + 10 + C = 38/3 + C
+
+        result_at_0 = integral_func(0)
+        result_at_2 = integral_func(2)
+
+        # The difference should equal the definite integral from 0 to 2
+        definite_from_indefinite = result_at_2 - result_at_0
+        expected_definite = (1 / 3) * 8 + 4 + 6  # 38/3 ≈ 12.667
+
+        np.testing.assert_allclose(
+            definite_from_indefinite, expected_definite, rtol=1e-10
+        )
+
+    def test_indefinite_vs_definite_integration(self):
+        """Test that indefinite integration gives same results as definite integration."""
+        # Create a quadratic expression
+        expr = Expression(
+            expression="2*x**2 + 3*x + 1", name="Quadratic", compute_integrals=True
+        )
+
+        # Get indefinite integral function
+        indefinite_func = expr.integrate(limits=None, variable="x", method="symbolic")
+
+        # Evaluate indefinite integral at bounds
+        lower_bound = 1.0
+        upper_bound = 4.0
+
+        indefinite_at_upper = indefinite_func(upper_bound)
+        indefinite_at_lower = indefinite_func(lower_bound)
+        definite_from_indefinite = indefinite_at_upper - indefinite_at_lower
+
+        # Compare with direct definite integration
+        direct_definite = expr.integrate(
+            (lower_bound, upper_bound), variable="x", method="symbolic"
+        )
+
+        np.testing.assert_allclose(
+            definite_from_indefinite, direct_definite, rtol=1e-12
+        )
+
+    def test_indefinite_integration_with_parameters(self):
+        """Test indefinite integration with parameter substitution."""
+        # Create expression with parameters
+        expr = Expression(
+            expression="a*x**2 + b",
+            name="ParametricQuadratic",
+            a=2.0,
+            b=5.0,
+            compute_integrals=True,
+        )
+
+        # Test with default parameter values
+        integral_func1 = expr.integrate(limits=None, variable="x", method="symbolic")
+        result1 = integral_func1(3) - integral_func1(0)
+
+        # Test with custom parameter values
+        integral_func2 = expr.integrate(
+            limits=None, variable="x", method="symbolic", parameters_values=[3.0, 7.0]
+        )
+        result2 = integral_func2(3) - integral_func2(0)
+
+        # Results should be different due to different parameter values
+        assert abs(result1 - result2) > 1e-6, (
+            "Parameter substitution should affect the result"
+        )
+
+        # Verify the results are correct
+        # For a=2, b=5: integral of 2*x^2 + 5 from 0 to 3 = [2*x^3/3 + 5*x] = 18 + 15 = 33
+        expected1 = 2 * (3**3) / 3 + 5 * 3  # = 18 + 15 = 33
+        np.testing.assert_allclose(result1, expected1, rtol=1e-10)
+
+        # For a=3, b=7: integral of 3*x^2 + 7 from 0 to 3 = [x^3 + 7*x] = 27 + 21 = 48
+        expected2 = 3 * (3**3) / 3 + 7 * 3  # = 27 + 21 = 48
+        np.testing.assert_allclose(result2, expected2, rtol=1e-10)
+
+    def test_indefinite_integration_error_cases(self):
+        """Test error handling for indefinite integration."""
+        # Test with compute_integrals=False
+        expr_no_integrals = Expression(
+            expression="x**2", name="NoIntegrals", compute_integrals=False
+        )
+
+        with pytest.raises(ValueError, match="compute_integrals must be True"):
+            expr_no_integrals.integrate(limits=None, variable="x", method="symbolic")
+
+        # Test with numerical method (should fail)
+        expr = Expression(expression="x**2", name="TestExpr", compute_integrals=True)
+
+        with pytest.raises(
+            ValueError, match="Indefinite integration only supports method='symbolic'"
+        ):
+            expr.integrate(limits=None, variable="x", method="numerical")
+
+    def test_indefinite_integration_complex_expression(self):
+        """Test indefinite integration with more complex expressions."""
+        # Create a more complex expression: sin(x) + cos(x) + x
+        expr = Expression(
+            expression="sin(x) + cos(x) + x", name="TrigPoly", compute_integrals=True
+        )
+
+        # Get indefinite integral function
+        integral_func = expr.integrate(limits=None, variable="x", method="symbolic")
+
+        # Test evaluation and comparison with definite integral
+        # The indefinite integral should be: -cos(x) + sin(x) + x^2/2 + C
+        lower, upper = 0, np.pi / 2
+
+        indefinite_result = integral_func(upper) - integral_func(lower)
+        definite_result = expr.integrate(
+            (lower, upper), variable="x", method="symbolic"
+        )
+
+        np.testing.assert_allclose(indefinite_result, definite_result, rtol=1e-10)
