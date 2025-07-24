@@ -170,3 +170,105 @@ class ScalableFixedPattern(Component):
 
     def grad_yscale(self, x):
         return self.function(x) / self.yscale.value
+
+    def integrate(self, limits, variable="x", method="auto", **kwargs):
+        """
+        Integrate the scalable fixed pattern using analytical spline integration.
+
+        This method uses SciPy's B-spline analytical integration capabilities to provide
+        faster and exact integration when interpolation is enabled. B-splines are
+        piecewise polynomials, so their integration is mathematically exact, not
+        numerical approximation. When interpolation is disabled, it falls back to
+        numerical integration.
+
+        The component function is: f(x) = yscale * spline(xscale * x - shift)
+        Integration accounts for the scaling and shifting transformations.
+
+        Parameters
+        ----------
+        limits : tuple
+            Integration limits (a, b) where a and b are the lower and upper bounds.
+        variable : str, default 'x'
+            Integration variable (included for API compatibility).
+            method : str, default 'auto'
+            Integration method to use:
+
+            * 'auto' : use analytical spline integration when available, fallback to numerical
+            * 'analytical' : use only analytical spline integration (raises error if unavailable)
+            * 'numerical' : use only numerical integration
+        **kwargs
+            Additional arguments passed to the integration methods.
+
+        Returns
+        -------
+        float
+            The integration result using analytical spline integration when interpolation
+            is enabled and method allows it, otherwise numerical integration.
+
+        Raises
+        ------
+        ValueError
+            If limits is not a tuple of length 2, or if method is invalid.
+        NotImplementedError
+            If method='analytical' but spline integration is not available.
+
+        Notes
+        -----
+        When interpolation is enabled, the integration uses the mathematical
+        transformation: ∫[a,b] yscale * spline(xscale * x - shift) dx
+        = yscale * (1/xscale) * ∫[a',b'] spline(u) du
+        where a' = xscale*a - shift and b' = xscale*b - shift
+
+        The spline integration is analytical (exact) because B-splines are piecewise
+        polynomials and polynomial integration is mathematically exact.
+
+        Examples
+        --------
+        >>> # Create a ScalableFixedPattern component
+        >>> signal = hs.signals.Signal1D(data)
+        >>> sfp = hs.model.components1D.ScalableFixedPattern(signal)
+        >>> result = sfp.integrate((0, 5))  # Uses analytical spline integration by default
+        >>> result = sfp.integrate((0, 5), method='analytical')  # Force analytical
+        >>> result = sfp.integrate((0, 5), method='numerical')   # Force numerical
+        """
+        # Validate method
+        valid_methods = {"auto", "analytical", "numerical"}
+        if method not in valid_methods:
+            raise ValueError(f"Invalid method '{method}'. Supported: {valid_methods}")
+
+        if not isinstance(limits, tuple) or len(limits) != 2:
+            raise ValueError("limits must be a tuple of length 2: (a, b)")
+
+        a, b = limits
+
+        # Use analytical spline integration if available and requested
+        spline_available = (
+            self.interpolate and hasattr(self, "f") and hasattr(self.f, "integrate")
+        )
+
+        if method == "analytical" and not spline_available:
+            raise NotImplementedError(
+                "Analytical spline integration is not available. "
+                "Ensure interpolation is enabled and spline is properly initialized."
+            )
+
+        if method in ("auto", "analytical") and spline_available:
+            # Transform integration limits for scaled and shifted spline
+            # f(x) = yscale * spline(xscale * x - shift)
+            # ∫ f(x) dx = yscale * (1/xscale) * ∫ spline(u) du
+            # where u = xscale * x - shift
+            transformed_a = self.xscale.value * a - self.shift.value
+            transformed_b = self.xscale.value * b - self.shift.value
+
+            # Integrate the underlying spline (this is analytical, not numerical)
+            spline_integral = self.f.integrate(transformed_a, transformed_b)
+
+            # Apply scaling factors
+            # d/dx [yscale * spline(xscale * x - shift)] = yscale * xscale * spline'(xscale * x - shift)
+            # So ∫ yscale * spline(xscale * x - shift) dx = yscale * (1/xscale) * ∫ spline(u) du
+            result = self.yscale.value * spline_integral / self.xscale.value
+
+            return float(result)
+
+        # Fall back to numerical integration from parent Component class
+        return super().integrate(limits, variable, method, **kwargs)
