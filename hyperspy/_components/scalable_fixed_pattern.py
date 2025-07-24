@@ -20,7 +20,9 @@ import numpy as np
 from scipy.interpolate import make_interp_spline
 
 from hyperspy.component import Component
-from hyperspy.docstrings.parameters import FUNCTION_ND_DOCSTRING
+from hyperspy.docstrings.parameters import (
+    FUNCTION_ND_DOCSTRING,
+)
 from hyperspy.ui_registry import add_gui_method
 
 
@@ -198,7 +200,12 @@ class ScalableFixedPattern(Component):
             * 'auto' : use analytical spline integration when available, fallback to numerical
             * 'analytical' : use only analytical spline integration (raises error if unavailable)
             * 'numerical' : use only numerical integration
-        %s
+        parameters_values : list, None, optional
+            List of parameters values used to calculate the component.
+            The order of the parameter in the list is defined in the
+            ``parameters`` attributes of the components
+            If ``None``, the parameters values for all navigation positions
+            are considered. The default is None.
         **kwargs
             Additional arguments passed to the integration methods.
 
@@ -332,7 +339,3 @@ class ScalableFixedPattern(Component):
             self.xscale.value = original_xscale
             self.yscale.value = original_yscale
             self.shift.value = original_shift
-
-
-# Apply dynamic docstring interpolation following HyperSpy patterns
-ScalableFixedPattern.integrate.__doc__ %= FUNCTION_ND_DOCSTRING

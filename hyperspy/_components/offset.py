@@ -20,7 +20,9 @@
 import numpy as np
 
 from hyperspy.component import Component
-from hyperspy.docstrings.parameters import FUNCTION_ND_DOCSTRING
+from hyperspy.docstrings.parameters import (
+    FUNCTION_ND_DOCSTRING,
+)
 
 
 class Offset(Component):
@@ -163,10 +165,14 @@ class Offset(Component):
         limits : tuple
             Integration limits (a, b) where a and b are the lower and upper bounds.
         variable : str, default 'x'
-            Integration variable (ignored for constant function, included for API compatibility).
+            Integration variable (included for API compatibility).
         method : str, default 'analytical'
             Integration method (ignored for constant function, included for API compatibility).
-        %s
+        parameters_values : list, optional
+            List of values for the component parameters. If provided, these values
+            are used instead of the current parameter values. For Offset, this
+            should be a list with one value: [offset_value].
+
         **kwargs
             Additional arguments (ignored, included for API compatibility).
 
@@ -174,6 +180,14 @@ class Offset(Component):
         -------
         float
             The analytical integration result: offset × (b - a).
+
+        Examples
+        --------
+        >>> offset = hs.model.components1D.Offset(offset=5.0)
+        >>> # Standard integration using current parameter values
+        >>> result = offset.integrate((0, 2))
+        >>> # Integration with runtime parameter substitution
+        >>> result = offset.integrate((0, 2), parameters_values=[7.0])
 
         Raises
         ------
@@ -188,6 +202,7 @@ class Offset(Component):
         >>>
         >>> # Runtime parameter substitution
         >>> result = offset.integrate((0, 3), parameters_values=[10.0])  # Returns 30.0
+        %s
         """
         if not isinstance(limits, tuple) or len(limits) != 2:
             raise ValueError("limits must be a tuple of length 2: (a, b)")
@@ -215,7 +230,3 @@ class Offset(Component):
             return 0
         else:
             return self.offset.value
-
-
-# Apply dynamic docstring interpolation following HyperSpy patterns
-Offset.integrate.__doc__ %= FUNCTION_ND_DOCSTRING

@@ -25,7 +25,9 @@ import numpy as np
 import sympy
 
 from hyperspy.component import Component
-from hyperspy.docstrings.parameters import FUNCTION_ND_DOCSTRING
+from hyperspy.docstrings.parameters import (
+    FUNCTION_ND_DOCSTRING,
+)
 
 _logger = logging.getLogger(__name__)
 
@@ -577,7 +579,12 @@ class Expression(Component):
             * 'auto' : try symbolic first, fallback to numerical
             * 'symbolic' : use only symbolic integration
             * 'numerical' : use only numerical integration
-        %s
+        parameters_values : list, None, optional
+            List of parameters values used to calculate the component.
+            The order of the parameter in the list is defined in the
+            ``parameters`` attributes of the components
+            If ``None``, the parameters values for all navigation positions
+            are considered. The default is None.
         **kwargs
             Additional keyword arguments passed to the integration methods.
 
@@ -628,6 +635,9 @@ class Expression(Component):
         ... )
         >>> # Double integration over x=[0,1], y=[0,2]
         >>> result = expr_2d.integrate([(0, 1), (0, 2)], ('x', 'y'), method='symbolic')
+        >>>
+        >>> # Runtime parameter substitution for Expression components
+        >>> result = poly.integrate((0, 2), parameters_values=[2.0, 1.0, 0.5])
         """
         # Validate method
         valid_methods = {"auto", "symbolic", "numerical"}
@@ -1012,4 +1022,3 @@ def _check_parameter_linearity(expr, name):
 
 
 # Apply dynamic docstring interpolation following HyperSpy patterns
-Expression.integrate.__doc__ %= FUNCTION_ND_DOCSTRING
