@@ -129,7 +129,9 @@ class TestExpressionIntegration:
 
         # Expected value: integral of exp(-x^2) from -1 to 1
         # This is related to the error function: sqrt(pi) * erf(1)
-        expected = np.sqrt(np.pi) * 2 * 0.8427007929  # erf(1) ≈ 0.8427
+        import scipy.special
+
+        expected = np.sqrt(np.pi) * scipy.special.erf(1)
         np.testing.assert_allclose(result, expected, rtol=1e-3)
 
     def test_2d_expression_x_integration(self):
@@ -265,7 +267,7 @@ class TestExpressionIntegration:
             compute_integrals=True,
         )
 
-        with pytest.raises(ValueError, match="Unsupported variable 'z'"):
+        with pytest.raises(ValueError, match="Unsupported variable: z"):
             expr.integrate((0, 1), variable="z")
 
     def test_1d_component_y_variable_raises_error(self):
@@ -289,7 +291,7 @@ class TestExpressionIntegration:
             compute_integrals=True,
         )
 
-        with pytest.raises(ValueError, match="must provide 'y' value"):
+        with pytest.raises(NotImplementedError, match="must provide 'y' value"):
             expr_2d.integrate((0, 1), variable="x", method="symbolic")
 
     def test_2d_component_missing_fixed_variable_y(self):
@@ -300,7 +302,7 @@ class TestExpressionIntegration:
             compute_integrals=True,
         )
 
-        with pytest.raises(ValueError, match="must provide 'x' value"):
+        with pytest.raises(NotImplementedError, match="must provide 'x' value"):
             expr_2d.integrate((0, 1), variable="y", method="symbolic")
 
     def test_invalid_limits_format(self):

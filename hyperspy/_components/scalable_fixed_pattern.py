@@ -171,7 +171,9 @@ class ScalableFixedPattern(Component):
     def grad_yscale(self, x):
         return self.function(x) / self.yscale.value
 
-    def integrate(self, limits, variable="x", method="auto", **kwargs):
+    def integrate(
+        self, limits, variable="x", method="auto", parameters_values=None, **kwargs
+    ):
         """
         Integrate the scalable fixed pattern using analytical spline integration.
 
@@ -190,12 +192,13 @@ class ScalableFixedPattern(Component):
             Integration limits (a, b) where a and b are the lower and upper bounds.
         variable : str, default 'x'
             Integration variable (included for API compatibility).
-            method : str, default 'auto'
+        method : str, default 'auto'
             Integration method to use:
 
             * 'auto' : use analytical spline integration when available, fallback to numerical
             * 'analytical' : use only analytical spline integration (raises error if unavailable)
             * 'numerical' : use only numerical integration
+        %s
         **kwargs
             Additional arguments passed to the integration methods.
 
@@ -230,6 +233,9 @@ class ScalableFixedPattern(Component):
         >>> result = sfp.integrate((0, 5))  # Uses analytical spline integration by default
         >>> result = sfp.integrate((0, 5), method='analytical')  # Force analytical
         >>> result = sfp.integrate((0, 5), method='numerical')   # Force numerical
+        >>>
+        >>> # Runtime parameter substitution [xscale, yscale, shift]
+        >>> result = sfp.integrate((0, 5), parameters_values=[2.0, 3.0, 1.0])
         """
         # Validate method
         valid_methods = {"auto", "analytical", "numerical"}
@@ -240,6 +246,18 @@ class ScalableFixedPattern(Component):
             raise ValueError("limits must be a tuple of length 2: (a, b)")
 
         a, b = limits
+
+        # Get parameter values (using provided values or current values)
+        if parameters_values is None:
+            xscale_value = self.xscale.value
+            yscale_value = self.yscale.value
+            shift_value = self.shift.value
+        else:
+            if len(parameters_values) != 3:
+                raise ValueError(
+                    f"Expected 3 parameter values [xscale, yscale, shift], got {len(parameters_values)}"
+                )
+            xscale_value, yscale_value, shift_value = parameters_values
 
         # Use analytical spline integration if available and requested
         spline_available = (
@@ -257,8 +275,8 @@ class ScalableFixedPattern(Component):
             # f(x) = yscale * spline(xscale * x - shift)
             # ∫ f(x) dx = yscale * (1/xscale) * ∫ spline(u) du
             # where u = xscale * x - shift
-            transformed_a = self.xscale.value * a - self.shift.value
-            transformed_b = self.xscale.value * b - self.shift.value
+            transformed_a = xscale_value * a - shift_value
+            transformed_b = xscale_value * b - shift_value
 
             # Integrate the underlying spline (this is analytical, not numerical)
             spline_integral = self.f.integrate(transformed_a, transformed_b)
@@ -266,9 +284,55 @@ class ScalableFixedPattern(Component):
             # Apply scaling factors
             # d/dx [yscale * spline(xscale * x - shift)] = yscale * xscale * spline'(xscale * x - shift)
             # So ∫ yscale * spline(xscale * x - shift) dx = yscale * (1/xscale) * ∫ spline(u) du
-            result = self.yscale.value * spline_integral / self.xscale.value
+            result = yscale_value * spline_integral / xscale_value
 
             return float(result)
 
-        # Fall back to numerical integration from parent Component class
-        return super().integrate(limits, variable, method, **kwargs)
+        # Fall back to numerical integration
+        if method in ("auto", "numerical"):
+            # If parameters_values is provided, we need to handle numerical integration ourselves
+            if parameters_values is not None:
+                return self._integrate_numerical_with_params(
+                    limits, variable, parameters_values, **kwargs
+                )
+            else:
+                return super().integrate(limits, variable, method, **kwargs)
+
+        raise RuntimeError(f"Integration failed for method '{method}'")
+
+    def _integrate_numerical_with_params(
+        self, limits, variable, parameters_values, **kwargs
+    ):
+        """Perform numerical integration with custom parameter values."""
+        from scipy.integrate import quad
+
+        # Temporarily store original parameter values
+        original_xscale = self.xscale.value
+        original_yscale = self.yscale.value
+        original_shift = self.shift.value
+
+        try:
+            # Set the provided parameter values
+            xscale_value, yscale_value, shift_value = parameters_values
+            self.xscale.value = xscale_value
+            self.yscale.value = yscale_value
+            self.shift.value = shift_value
+
+            # Use numerical integration
+            a, b = limits
+
+            def integrand(x_val):
+                return self.function(x_val)
+
+            result, _ = quad(integrand, a, b)
+            return result
+
+        finally:
+            # Restore original parameter values
+            self.xscale.value = original_xscale
+            self.yscale.value = original_yscale
+            self.shift.value = original_shift
+
+
+# Apply dynamic docstring interpolation following HyperSpy patterns
+ScalableFixedPattern.integrate.__doc__ %= FUNCTION_ND_DOCSTRING

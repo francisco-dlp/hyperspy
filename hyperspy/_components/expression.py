@@ -548,7 +548,9 @@ class Expression(Component):
 
         return data
 
-    def integrate(self, limits, variable="x", method="auto", **kwargs):
+    def integrate(
+        self, limits, variable="x", method="auto", parameters_values=None, **kwargs
+    ):
         """
         Integrate the expression symbolically or numerically.
 
@@ -575,6 +577,7 @@ class Expression(Component):
             * 'auto' : try symbolic first, fallback to numerical
             * 'symbolic' : use only symbolic integration
             * 'numerical' : use only numerical integration
+        %s
         **kwargs
             Additional keyword arguments passed to the integration methods.
 
@@ -646,7 +649,9 @@ class Expression(Component):
         # Try symbolic integration first if available and requested
         if method in ("auto", "symbolic") and symbolic_available:
             try:
-                return self._integrate_symbolic(limits, variable, **kwargs)
+                return self._integrate_symbolic(
+                    limits, variable, parameters_values=parameters_values, **kwargs
+                )
             except Exception as e:
                 if method == "symbolic":
                     raise NotImplementedError(f"Symbolic integration failed: {e}")
@@ -654,11 +659,18 @@ class Expression(Component):
 
         # Use numerical integration from parent Component class
         if method in ("auto", "numerical"):
-            return super().integrate(limits, variable, **kwargs)
+            # If parameters_values is provided, we need to handle numerical integration ourselves
+            # since the parent Component.integrate doesn't support parameter substitution
+            if parameters_values is not None:
+                return self._integrate_numerical_with_params(
+                    limits, variable, parameters_values, **kwargs
+                )
+            else:
+                return super().integrate(limits, variable, **kwargs)
 
         raise RuntimeError(f"Integration failed for method '{method}'")
 
-    def _integrate_symbolic(self, limits, variable, **kwargs):
+    def _integrate_symbolic(self, limits, variable, parameters_values=None, **kwargs):
         """Perform symbolic integration using the precomputed integrals."""
         # Handle single variable integration
         if isinstance(variable, str):
@@ -671,7 +683,9 @@ class Expression(Component):
             if not isinstance(limits, tuple) or len(limits) != 2:
                 raise ValueError("For single variable, limits must be a tuple (a, b)")
 
-            return self._integrate_symbolic_single(limits, variable, **kwargs)
+            return self._integrate_symbolic_single(
+                limits, variable, parameters_values=parameters_values, **kwargs
+            )
 
         # Handle double integration
         elif isinstance(variable, tuple):
@@ -695,12 +709,16 @@ class Expression(Component):
                     "For double integration, limits must be a list/tuple of 2 tuples"
                 )
 
-            return self._integrate_symbolic_double(limits, variable, **kwargs)
+            return self._integrate_symbolic_double(
+                limits, variable, parameters_values=parameters_values, **kwargs
+            )
 
         else:
             raise ValueError("Variable must be a string or tuple of strings")
 
-    def _integrate_symbolic_single(self, limits, variable, **kwargs):
+    def _integrate_symbolic_single(
+        self, limits, variable, parameters_values=None, **kwargs
+    ):
         """Perform symbolic single variable integration."""
         # Get the symbolic integral function
         integral_func = getattr(self, f"_integral_{variable}_func", None)
@@ -709,6 +727,11 @@ class Expression(Component):
                 f"Symbolic integral for variable '{variable}' not available"
             )
 
+        # Use provided parameter values or get current values
+        if parameters_values is None:
+            param_values = [p.value for p in self.parameters]
+        else:
+            param_values = parameters_values
         # For 2D components integrating over one variable, substitute fixed values
         if self._is2D:
             other_var = "y" if variable == "x" else "x"
@@ -718,17 +741,34 @@ class Expression(Component):
                 # Evaluate definite integral using fundamental theorem of calculus
                 lower, upper = limits
 
-                # Get parameter values
-                param_values = [p.value for p in self.parameters]
-
                 if variable == "x" and other_var == "y":
-                    upper_val = integral_func(upper, other_val, *param_values)
-                    lower_val = integral_func(lower, other_val, *param_values)
+                    if np.isscalar(other_val):
+                        upper_val = integral_func(upper, other_val, *param_values)
+                        lower_val = integral_func(lower, other_val, *param_values)
+                        return float(upper_val - lower_val)
+                    else:
+                        # Handle array of y values
+                        other_array = np.asarray(other_val)
+                        results = np.zeros_like(other_array, dtype=float)
+                        for i, y_val in enumerate(other_array.flat):
+                            upper_val = integral_func(upper, y_val, *param_values)
+                            lower_val = integral_func(lower, y_val, *param_values)
+                            results.flat[i] = float(upper_val - lower_val)
+                        return results.reshape(other_array.shape)
                 else:  # variable == "y" and other_var == "x"
-                    upper_val = integral_func(other_val, upper, *param_values)
-                    lower_val = integral_func(other_val, lower, *param_values)
-
-                return float(upper_val - lower_val)
+                    if np.isscalar(other_val):
+                        upper_val = integral_func(other_val, upper, *param_values)
+                        lower_val = integral_func(other_val, lower, *param_values)
+                        return float(upper_val - lower_val)
+                    else:
+                        # Handle array of x values
+                        other_array = np.asarray(other_val)
+                        results = np.zeros_like(other_array, dtype=float)
+                        for i, x_val in enumerate(other_array.flat):
+                            upper_val = integral_func(x_val, upper, *param_values)
+                            lower_val = integral_func(x_val, lower, *param_values)
+                            results.flat[i] = float(upper_val - lower_val)
+                        return results.reshape(other_array.shape)
             else:
                 raise ValueError(
                     f"For 2D component integration over '{variable}', "
@@ -737,14 +777,15 @@ class Expression(Component):
         else:
             # 1D component
             lower, upper = limits
-            param_values = [p.value for p in self.parameters]
 
             upper_val = integral_func(upper, *param_values)
             lower_val = integral_func(lower, *param_values)
 
             return float(upper_val - lower_val)
 
-    def _integrate_symbolic_double(self, limits, variable, **kwargs):
+    def _integrate_symbolic_double(
+        self, limits, variable, parameters_values=None, **kwargs
+    ):
         """Perform symbolic double integration."""
         import sympy
 
@@ -756,8 +797,11 @@ class Expression(Component):
         limits1, limits2 = limits
 
         try:
-            # Get parameter values
-            param_values = [p.value for p in self.parameters]
+            # Use provided parameter values or get current values
+            if parameters_values is None:
+                param_values = [p.value for p in self.parameters]
+            else:
+                param_values = parameters_values
 
             # Get the original parsed expression
             expr = self._parsed_expr
@@ -811,6 +855,143 @@ class Expression(Component):
                 "Try using method='numerical' instead."
             )
 
+    def _integrate_numerical_with_params(
+        self, limits, variable, parameters_values, **kwargs
+    ):
+        """Perform numerical integration with custom parameter values."""
+        from scipy.integrate import dblquad, quad
+
+        # Temporarily store original parameter values
+        original_values = [p.value for p in self.parameters]
+
+        try:
+            # Set the provided parameter values
+            for param, value in zip(self.parameters, parameters_values):
+                param.value = value
+
+            # Handle single variable integration
+            if isinstance(variable, str):
+                if not isinstance(limits, tuple) or len(limits) != 2:
+                    raise ValueError(
+                        "For single variable, limits must be a tuple (a, b)"
+                    )
+
+                a, b = limits
+
+                if variable == "x":
+                    if self._is2D:
+                        # 2D component, need y value
+                        if "y" not in kwargs:
+                            raise ValueError(
+                                "For 2D component integration over 'x', must provide "
+                                "'y' value as keyword argument"
+                            )
+                        y_fixed = kwargs["y"]
+
+                        if np.isscalar(y_fixed):
+
+                            def integrand(x_val):
+                                return self.function(x_val, y_fixed)
+
+                            result, _ = quad(integrand, a, b)
+                            return result
+                        else:
+                            # Array of y values
+                            y_array = np.asarray(y_fixed)
+                            results = np.zeros_like(y_array, dtype=float)
+                            for i, y_val in enumerate(y_array.flat):
+
+                                def integrand(x_val):
+                                    return self.function(x_val, y_val)
+
+                                results.flat[i], _ = quad(integrand, a, b)
+                            return results.reshape(y_array.shape)
+                    else:
+                        # 1D component
+                        def integrand(x_val):
+                            return self.function(x_val)
+
+                        result, _ = quad(integrand, a, b)
+                        return result
+
+                elif variable == "y":
+                    if not self._is2D:
+                        raise ValueError("Variable 'y' is only valid for 2D components")
+
+                    if "x" not in kwargs:
+                        raise ValueError(
+                            "For 2D component integration over 'y', must provide "
+                            "'x' value as keyword argument"
+                        )
+                    x_fixed = kwargs["x"]
+
+                    if np.isscalar(x_fixed):
+
+                        def integrand(y_val):
+                            return self.function(x_fixed, y_val)
+
+                        result, _ = quad(integrand, a, b)
+                        return result
+                    else:
+                        # Array of x values
+                        x_array = np.asarray(x_fixed)
+                        results = np.zeros_like(x_array, dtype=float)
+                        for i, x_val in enumerate(x_array.flat):
+
+                            def integrand(y_val):
+                                return self.function(x_val, y_val)
+
+                            results.flat[i], _ = quad(integrand, a, b)
+                        return results.reshape(x_array.shape)
+                else:
+                    raise ValueError(
+                        f"Unsupported variable '{variable}'. Use 'x' or 'y'."
+                    )
+
+            # Handle double integration
+            elif isinstance(variable, tuple):
+                if len(variable) != 2:
+                    raise ValueError(
+                        "For double integration, variable must be a tuple of exactly 2 elements"
+                    )
+
+                if not self._is2D:
+                    raise ValueError(
+                        "Double integration is only available for 2D components"
+                    )
+
+                if set(variable) != {"x", "y"}:
+                    raise ValueError(
+                        "For double integration, variables must be 'x' and 'y'"
+                    )
+
+                if not isinstance(limits, (list, tuple)) or len(limits) != 2:
+                    raise ValueError(
+                        "For double integration, limits must be a list/tuple of 2 tuples"
+                    )
+
+                x_limits, y_limits = limits
+
+                def integrand(y_val, x_val):
+                    return self.function(x_val, y_val)
+
+                result = dblquad(
+                    integrand,
+                    x_limits[0],
+                    x_limits[1],  # x integration limits
+                    y_limits[0],
+                    y_limits[1],  # y integration limits
+                )[0]
+                return result
+
+            else:
+                raise ValueError("Variable must be a string or tuple of strings")
+
+        finally:
+            # Restore original parameter values
+            for param, original_value in zip(self.parameters, original_values):
+                param.value = original_value
+
 
 def _check_parameter_linearity(expr, name):
     """Check whether expression is linear for a given parameter."""
@@ -828,3 +1009,7 @@ def _check_parameter_linearity(expr, name):
         )
         return False
     return True
+
+
+# Apply dynamic docstring interpolation following HyperSpy patterns
+Expression.integrate.__doc__ %= FUNCTION_ND_DOCSTRING

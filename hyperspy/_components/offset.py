@@ -144,7 +144,14 @@ class Offset(Component):
 
     function_nd.__doc__ %= FUNCTION_ND_DOCSTRING
 
-    def integrate(self, limits, variable="x", **kwargs):
+    def integrate(
+        self,
+        limits,
+        variable="x",
+        method="analytical",
+        parameters_values=None,
+        **kwargs,
+    ):
         """
         Analytical integration of the constant offset function.
 
@@ -157,6 +164,9 @@ class Offset(Component):
             Integration limits (a, b) where a and b are the lower and upper bounds.
         variable : str, default 'x'
             Integration variable (ignored for constant function, included for API compatibility).
+        method : str, default 'analytical'
+            Integration method (ignored for constant function, included for API compatibility).
+        %s
         **kwargs
             Additional arguments (ignored, included for API compatibility).
 
@@ -175,14 +185,27 @@ class Offset(Component):
         >>> offset = hs.model.components1D.Offset(offset=5.0)
         >>> result = offset.integrate((0, 3))  # Returns 15.0
         >>> result = offset.integrate((-1, 2))  # Returns 15.0
+        >>>
+        >>> # Runtime parameter substitution
+        >>> result = offset.integrate((0, 3), parameters_values=[10.0])  # Returns 30.0
         """
         if not isinstance(limits, tuple) or len(limits) != 2:
             raise ValueError("limits must be a tuple of length 2: (a, b)")
 
         a, b = limits
 
+        # Use provided parameter values or current values
+        if parameters_values is None:
+            offset_value = self.offset.value
+        else:
+            if len(parameters_values) != 1:
+                raise ValueError(
+                    f"Expected 1 parameter value, got {len(parameters_values)}"
+                )
+            offset_value = parameters_values[0]
+
         # For constant function f(x) = k, integral from a to b is k * (b - a)
-        return self.offset.value * (b - a)
+        return offset_value * (b - a)
 
     @property
     def _constant_term(self):
@@ -192,3 +215,7 @@ class Offset(Component):
             return 0
         else:
             return self.offset.value
+
+
+# Apply dynamic docstring interpolation following HyperSpy patterns
+Offset.integrate.__doc__ %= FUNCTION_ND_DOCSTRING
