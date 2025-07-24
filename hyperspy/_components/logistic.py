@@ -67,6 +67,7 @@ class Logistic(Expression):
             position="origin",
             module=module,
             autodoc=False,
+            compute_integrals=True,  # Enable symbolic integration by default
             **kwargs,
         )
 

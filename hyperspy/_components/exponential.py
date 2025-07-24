@@ -59,6 +59,7 @@ class Exponential(Expression):
             tau=tau,
             module=module,
             autodoc=False,
+            compute_integrals=True,  # Enable symbolic integration by default
             **kwargs,
         )
 

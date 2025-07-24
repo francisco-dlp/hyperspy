@@ -80,6 +80,10 @@ class Gaussian2D(Expression):
         module=None,
         **kwargs,
     ):
+        # For symbolic integration, prefer numpy/scipy over numexpr
+        if module is None:
+            module = "numpy"
+
         super().__init__(
             expression="A * (1 / (sigma_x * sigma_y * 2 * pi)) * \
                        exp(-((x - centre_x) ** 2 / (2 * sigma_x ** 2) \
@@ -93,6 +97,7 @@ class Gaussian2D(Expression):
             position=("centre_x", "centre_y"),
             module=module,
             autodoc=False,
+            compute_integrals=True,  # Enable symbolic integration by default
             **kwargs,
         )
 

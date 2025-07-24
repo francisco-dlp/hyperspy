@@ -112,6 +112,10 @@ class Gaussian(Expression):
     """
 
     def __init__(self, A=1.0, sigma=1.0, centre=0.0, module=None, **kwargs):
+        # For symbolic integration with erf functions, prefer numpy/scipy over numexpr
+        if module is None:
+            module = "numpy"
+
         super().__init__(
             expression="A * (1 / (sigma * sqrt(2*pi))) * exp(-(x - centre)**2 \
                         / (2 * sigma**2))",
@@ -122,6 +126,7 @@ class Gaussian(Expression):
             position="centre",
             module=module,
             autodoc=False,
+            compute_integrals=True,  # Enable symbolic integration by default
             **kwargs,
         )
 

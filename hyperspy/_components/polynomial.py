@@ -61,7 +61,12 @@ class Polynomial(Expression):
         )
         name = "{} order Polynomial".format(ordinal(order))
         super().__init__(
-            expression=expr, name=name, module=module, autodoc=False, **kwargs
+            expression=expr,
+            name=name,
+            module=module,
+            autodoc=False,
+            compute_integrals=True,  # Enable symbolic integration by default
+            **kwargs,
         )
         # Need to save order to be able to reload component after being saved
         self._whitelist["order"] = ("init", order)

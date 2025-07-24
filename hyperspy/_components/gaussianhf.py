@@ -82,6 +82,10 @@ class GaussianHF(Expression):
     """
 
     def __init__(self, height=1.0, fwhm=1.0, centre=0.0, module=None, **kwargs):
+        # For symbolic integration with exp functions, prefer numpy/scipy over numexpr
+        if module is None:
+            module = "numpy"
+
         super().__init__(
             expression="height * exp(-(x - centre)**2 * 4 * log(2)/fwhm**2)",
             name="GaussianHF",
@@ -91,6 +95,7 @@ class GaussianHF(Expression):
             position="centre",
             module=module,
             autodoc=False,
+            compute_integrals=True,  # Enable symbolic integration by default
             **kwargs,
         )
 

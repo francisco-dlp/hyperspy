@@ -615,6 +615,16 @@ class Expression(Component):
         >>> result = poly_symbolic.integrate((0, 2), method='auto')
         >>> # Force numerical integration
         >>> result = poly_symbolic.integrate((0, 2), method='numerical')
+        >>>
+        >>> # 2D component double integration
+        >>> expr_2d = hs.model.components2D.Expression(
+        ...     expression="a * x * y + b * x**2",
+        ...     name="TwoDFunction",
+        ...     a=2.0, b=1.0,
+        ...     compute_integrals=True
+        ... )
+        >>> # Double integration over x=[0,1], y=[0,2]
+        >>> result = expr_2d.integrate([(0, 1), (0, 2)], ('x', 'y'), method='symbolic')
         """
         # Validate method
         valid_methods = {"auto", "symbolic", "numerical"}
@@ -736,11 +746,70 @@ class Expression(Component):
 
     def _integrate_symbolic_double(self, limits, variable, **kwargs):
         """Perform symbolic double integration."""
-        # This is more complex and would require computing the double integral symbolically
-        # For now, fall back to numerical integration
-        raise NotImplementedError(
-            "Symbolic double integration not yet implemented. Use method='numerical'"
-        )
+        import sympy
+
+        # For double integration, we need to compute ∫∫ f(x,y) dy dx (or dx dy)
+        # We'll use symbolic integration twice - first over one variable, then the other
+
+        # Extract variables and limits
+        var1, var2 = variable
+        limits1, limits2 = limits
+
+        try:
+            # Get parameter values
+            param_values = [p.value for p in self.parameters]
+
+            # Get the original parsed expression
+            expr = self._parsed_expr
+
+            # Extract the symbol objects for the variables
+            x_symbol = [s for s in expr.free_symbols if s.name == "x"][0]
+            y_symbol = [s for s in expr.free_symbols if s.name == "y"][0]
+            parameter_symbols = [
+                s for s in expr.free_symbols if s.name not in ("x", "y")
+            ]
+            parameter_symbols.sort(key=lambda s: s.name)  # Keep consistent ordering
+
+            # Map variable names to symbol objects
+            var_map = {"x": x_symbol, "y": y_symbol}
+            symbol1, symbol2 = var_map[var1], var_map[var2]
+
+            # First integration: integrate over var2 (inner integral)
+            inner_integral = sympy.integrate(expr, symbol2)
+
+            # Create limits for inner integral
+            lower2, upper2 = limits2
+
+            # Evaluate the inner integral at its limits
+            inner_upper = inner_integral.subs(symbol2, upper2)
+            inner_lower = inner_integral.subs(symbol2, lower2)
+            inner_result = sympy.simplify(inner_upper - inner_lower)
+
+            # Second integration: integrate the result over var1 (outer integral)
+            outer_integral = sympy.integrate(inner_result, symbol1)
+
+            # Create limits for outer integral
+            lower1, upper1 = limits1
+
+            # Evaluate the outer integral at its limits
+            outer_upper = outer_integral.subs(symbol1, upper1)
+            outer_lower = outer_integral.subs(symbol1, lower1)
+            outer_result = sympy.simplify(outer_upper - outer_lower)
+
+            # Substitute parameter values
+            for param_symbol, param_value in zip(parameter_symbols, param_values):
+                outer_result = outer_result.subs(param_symbol, param_value)
+
+            # Evaluate to get numerical result
+            result = float(outer_result.evalf())
+
+            return result
+
+        except Exception as e:
+            raise RuntimeError(
+                f"Symbolic double integration failed: {e}. "
+                "Try using method='numerical' instead."
+            )
 
 
 def _check_parameter_linearity(expr, name):

@@ -108,6 +108,7 @@ class Lorentzian(Expression):
             module=module,
             autodoc=False,
             rename_pars={"gamma_": "gamma"},
+            compute_integrals=True,  # Enable symbolic integration by default
             **kwargs,
         )
 
