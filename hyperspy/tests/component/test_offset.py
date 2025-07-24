@@ -72,3 +72,90 @@ class TestOffset:
 
         o.offset.free = False
         assert o._constant_term == o.offset.value
+
+    def test_integrate_analytical(self):
+        """Test the analytical integration method for Offset component."""
+        o = hs.model.components1D.Offset(offset=5.0)
+
+        # Test basic integration
+        result = o.integrate((0, 3))
+        expected = 5.0 * (3 - 0)
+        np.testing.assert_allclose(result, expected)
+
+        # Test with negative limits
+        result = o.integrate((-1, 2))
+        expected = 5.0 * (2 - (-1))
+        np.testing.assert_allclose(result, expected)
+
+        # Test with reversed limits (should be negative)
+        result = o.integrate((3, 1))
+        expected = 5.0 * (1 - 3)
+        np.testing.assert_allclose(result, expected)
+
+        # Test with zero width integration
+        result = o.integrate((2, 2))
+        expected = 5.0 * (2 - 2)
+        np.testing.assert_allclose(result, expected)
+
+        # Test with different offset value
+        o.offset.value = 2.5
+        result = o.integrate((1, 5))
+        expected = 2.5 * (5 - 1)
+        np.testing.assert_allclose(result, expected)
+
+        # Test with floating point limits
+        result = o.integrate((0.5, 3.7))
+        expected = 2.5 * (3.7 - 0.5)
+        np.testing.assert_allclose(result, expected)
+
+    def test_integrate_error_handling(self):
+        """Test error handling for the integrate method."""
+        o = hs.model.components1D.Offset(offset=5.0)
+
+        # Test invalid limits format
+        with pytest.raises(ValueError, match="limits must be a tuple of length 2"):
+            o.integrate([0, 3])  # List instead of tuple
+
+        with pytest.raises(ValueError, match="limits must be a tuple of length 2"):
+            o.integrate((0, 3, 5))  # Too many elements
+
+        with pytest.raises(ValueError, match="limits must be a tuple of length 2"):
+            o.integrate(5)  # Not a tuple
+
+    def test_integrate_api_compatibility(self):
+        """Test that integrate method accepts standard parameters for API compatibility."""
+        o = hs.model.components1D.Offset(offset=5.0)
+
+        # Test that variable parameter is accepted (but ignored for constant function)
+        result1 = o.integrate((0, 2), variable="x")
+        result2 = o.integrate((0, 2), variable="y")  # Should work even though it's 1D
+        result3 = o.integrate((0, 2))  # Default
+
+        # All should give same result since it's a constant function
+        expected = 5.0 * 2
+        np.testing.assert_allclose(result1, expected)
+        np.testing.assert_allclose(result2, expected)
+        np.testing.assert_allclose(result3, expected)
+
+        # Test that additional kwargs are accepted and ignored
+        result = o.integrate((0, 2), method="analytical", some_param=123)
+        np.testing.assert_allclose(result, expected)
+
+    def test_integrate_vs_numerical(self):
+        """Test that analytical integration gives same result as numerical."""
+        from hyperspy.component import Component
+
+        o = hs.model.components1D.Offset(offset=7.3)
+
+        # Compare analytical vs numerical integration
+        analytical_result = o.integrate((1, 4))
+        numerical_result = Component.integrate(o, (1, 4))
+
+        # Should be identical (within floating point precision)
+        np.testing.assert_allclose(analytical_result, numerical_result, rtol=1e-12)
+
+        # Test with different ranges
+        for limits in [(0, 1), (-2, 3), (0.5, 1.5), (-1, -0.5)]:
+            analytical = o.integrate(limits)
+            numerical = Component.integrate(o, limits)
+            np.testing.assert_allclose(analytical, numerical, rtol=1e-12)

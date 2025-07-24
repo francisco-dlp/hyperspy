@@ -144,6 +144,46 @@ class Offset(Component):
 
     function_nd.__doc__ %= FUNCTION_ND_DOCSTRING
 
+    def integrate(self, limits, variable="x", **kwargs):
+        """
+        Analytical integration of the constant offset function.
+
+        For a constant function f(x) = k, the integral from a to b is k × (b - a).
+        This is much faster and more accurate than numerical integration.
+
+        Parameters
+        ----------
+        limits : tuple
+            Integration limits (a, b) where a and b are the lower and upper bounds.
+        variable : str, default 'x'
+            Integration variable (ignored for constant function, included for API compatibility).
+        **kwargs
+            Additional arguments (ignored, included for API compatibility).
+
+        Returns
+        -------
+        float
+            The analytical integration result: offset × (b - a).
+
+        Raises
+        ------
+        ValueError
+            If limits is not a tuple of length 2.
+
+        Examples
+        --------
+        >>> offset = hs.model.components1D.Offset(offset=5.0)
+        >>> result = offset.integrate((0, 3))  # Returns 15.0
+        >>> result = offset.integrate((-1, 2))  # Returns 15.0
+        """
+        if not isinstance(limits, tuple) or len(limits) != 2:
+            raise ValueError("limits must be a tuple of length 2: (a, b)")
+
+        a, b = limits
+
+        # For constant function f(x) = k, integral from a to b is k * (b - a)
+        return self.offset.value * (b - a)
+
     @property
     def _constant_term(self):
         "Get value of constant term of component"
