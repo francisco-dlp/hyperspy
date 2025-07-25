@@ -80,6 +80,7 @@ class PowerLaw(Expression):
             module=module,
             autodoc=False,
             compute_gradients=compute_gradients,
+            compute_integrals=False,  # Disable symbolic integration due to sympy limitations
             linear_parameter_list=["A"],
             check_parameter_linearity=False,
             **kwargs,

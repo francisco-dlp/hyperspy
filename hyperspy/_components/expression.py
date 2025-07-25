@@ -32,6 +32,17 @@ from hyperspy.docstrings.parameters import (
 _logger = logging.getLogger(__name__)
 
 
+class DivergentIntegralError(ValueError):
+    """Exception raised when an integral is mathematically divergent.
+
+    This exception should be raised when symbolic analysis determines that
+    an integral diverges to infinity, rather than attempting numerical
+    integration which may produce misleading results.
+    """
+
+    pass
+
+
 _CLASS_DOC = """%s component (created with Expression).
 
 .. math::
@@ -454,7 +465,7 @@ class Expression(Component):
 
         Parameters
         ----------
-        limits : tuple or list of tuples
+        limits : tuple or list of tuple
             Integration limits for the variable(s). For single variable: (a, b).
             For double integration: [(a1, b1), (a2, b2)] corresponding to variable order.
         variable : str or tuple, default 'x'
@@ -830,7 +841,7 @@ class Expression(Component):
         return data
 
     def integrate(
-        self, limits=None, variable="x", method="auto", parameters_values=None, **kwargs
+        self, limits, variable="x", method="auto", parameters_values=None, **kwargs
     ):
         """Integrate the expression symbolically or numerically.
 
@@ -839,23 +850,23 @@ class Expression(Component):
         or fails, it falls back to numerical integration using the parent
         Component class's integration method.
 
-        Supports both definite and indefinite integration, as well as fixed and
+        Supports both definite and improper integration, as well as fixed and
         variable integration limits for navigation-aware integration across
         multiple parameter sets.
 
         Parameters
         ----------
-        limits : tuple, array-like, tuple of array-like, or None, default None
+        limits : tuple, array-like, or tuple of array-like
             Integration limits. Can be:
 
-            * None : Indefinite integration (returns symbolic expression)
             * (a, b) : Fixed limits for all navigation positions
             * (a_array, b_array) : Variable limits with arrays matching navigation dimensions
             * array of (a, b) tuples : Variable limits for each navigation position
             * For double integration: [(a1, b1), (a2, b2)] where each can be fixed or variable
 
-            When limits=None, symbolic indefinite integration is performed when
-            available, returning a symbolic expression or lambda function.
+            For improper integration, limits can include infinite values:
+            (-np.inf, np.inf), (-np.inf, x), (x, np.inf), etc.
+
         variable : str or tuple, default 'x'
             Variable(s) to integrate with respect to. For 1D components: 'x'.
             For 2D components: 'x', 'y', or ('x', 'y') for double integration.
@@ -865,9 +876,9 @@ class Expression(Component):
         method : str, default 'auto'
             Integration method to use:
 
-            * 'auto' : try symbolic first, fallback to numerical (for definite) or error (for indefinite)
+            * 'auto' : try symbolic first, fallback to numerical
             * 'symbolic' : use only symbolic integration
-            * 'numerical' : use only numerical integration (not available for indefinite)
+            * 'numerical' : use only numerical integration
         parameters_values : list or None, optional
             List of parameters values used to calculate the component.
             The order of the parameter in the list is defined in the
@@ -879,16 +890,15 @@ class Expression(Component):
 
         Returns
         -------
-        float, numpy.ndarray, or callable
-            For definite integration: Integration result as scalar for fixed limits,
-            or array matching navigation dimensions for variable limits.
-            For indefinite integration (limits=None): Returns a lambda function
-            that can evaluate the indefinite integral at any point.
+        float or numpy.ndarray
+            Integration result as scalar for fixed limits, or array matching
+            navigation dimensions for variable limits.
 
         Raises
         ------
         ValueError
             If invalid variable, method, or limits are provided.
+            If compute_integrals=False and symbolic integration is attempted.
         NotImplementedError
             If symbolic integration fails and method='symbolic', or if symbolic
             integration is not available when method='symbolic' is specified.
@@ -897,91 +907,189 @@ class Expression(Component):
 
         Examples
         --------
-        Create a polynomial expression:
+        **Basic 1D Integration with Different Dimensional Data**
 
-        >>> poly = hs.model.components1D.Expression(
-        ...     expression="a * x**2 + b * x + c",
-        ...     name="Polynomial",
-        ...     a=1.0, b=2.0, c=3.0
-        ... )
-
-        Integrate from 0 to 2 (uses numerical integration by default):
-
-        >>> result = poly.integrate((0, 2))
-
-        Variable limits integration:
-
+        Create a 1D signal with different navigation dimensions (following AI Guide):        >>> import hyperspy.api as hs
         >>> import numpy as np
-        >>> a_vals = np.array([0, 1])
-        >>> b_vals = np.array([2, 3])
-        >>> results = poly.integrate((a_vals, b_vals))
+        >>> # Navigation dimensions: 48 × 32 (different sizes for clarity)
+        >>> # Signal dimension: 256 energy channels
+        >>> data = np.random.random((48, 32, 256))
+        >>> spectrum_image = hs.signals.Signal1D(data)
+        >>> spectrum_image.axes_manager[0].name = 'scan_x'     # 48 pixels
+        >>> spectrum_image.axes_manager[1].name = 'scan_y'     # 32 pixels
+        >>> spectrum_image.axes_manager[2].name = 'energy'     # 256 channels
+        >>> spectrum_image.axes_manager[2].scale = 0.1         # 0.1 eV/channel
+        >>> spectrum_image.axes_manager[2].offset = 100.0      # Start at 100 eV
 
-        Enable symbolic integration for faster computation:
+        Create a Gaussian component for peak fitting:
 
-        >>> poly_symbolic = hs.model.components1D.Expression(
+        >>> model = spectrum_image.create_model()
+        >>> gaussian_peak = hs.model.components1D.Gaussian()
+        >>> gaussian_peak.A.value = 1000.0        # Peak amplitude
+        >>> gaussian_peak.centre.value = 150.0    # Peak at 150 eV
+        >>> gaussian_peak.sigma.value = 5.0       # 5 eV width
+        >>> model.append(gaussian_peak)
+
+        Integrate the Gaussian peak over the main peak region:
+
+        >>> # Integration in calibrated energy units (eV)
+        >>> peak_area = gaussian_peak.integrate((140.0, 160.0))
+        >>> print(f"Peak area: {peak_area:.2f} counts·eV")
+
+        **Polynomial Expression Integration**
+
+        Create a polynomial expression component:        >>> poly = hs.model.components1D.Expression(
         ...     expression="a * x**2 + b * x + c",
         ...     name="Polynomial",
-        ...     a=1.0, b=2.0, c=3.0,
+        ...     compute_integrals=True)
+        >>> poly.a.value = 1.0
+        >>> poly.b.value = 2.0
+        >>> poly.c.value = 3.0
+
+        **Definite Integration:**
+
+        Integrate from 0 to 2 using symbolic method:
+
+        >>> result = poly.integrate((0, 2), method='symbolic')
+        >>> print(f"Definite integral: {result}")
+        12.666666666666666
+
+        **Improper Integration with Divergence Detection**
+
+        For functions extending to infinity, enable analytical integration:        >>> # Exponential decay component (requires compute_integrals=True)
+        >>> exp_component = hs.model.components1D.Expression(
+        ...     expression="A * exp(-energy/decay_constant)",
+        ...     name="exponential_tail",
+        ...     position="decay_constant",
+        ...     compute_integrals=True  # Enable symbolic integration
+        ... )
+        >>> exp_component.A.value = 500.0
+        >>> exp_component.decay_constant.value = 20.0  # 20 eV decay
+
+        Integrate from peak center to infinity (proper convergent integral):
+
+        >>> tail_area = exp_component.integrate((150.0, np.inf))
+        >>> print(f"Tail integral: {tail_area:.2f} counts·eV")
+
+        **Gaussian with improper bounds:**
+
+        >>> gaussian = hs.model.components1D.Expression(
+        ...     expression="a * exp(-(x - mu)**2 / (2 * sigma**2))",
+        ...     name="Gaussian",
+        ...     compute_integrals=True)
+        >>> gaussian.a.value = 1.0
+        >>> gaussian.mu.value = 0.0
+        >>> gaussian.sigma.value = 1.0
+        >>> result = gaussian.integrate((-np.inf, np.inf))
+        >>> print(f"Improper integral: {result}")
+
+        **Multi-Dimensional Integration Patterns**
+
+        For 2D detector data, integrate over specific spatial dimensions:        >>> # 4D-STEM data: scan positions × detector pixels
+        >>> # Different dimensions: 24×16 scan, 128×64 detector
+        >>> stem_data = np.random.random((24, 16, 128, 64))
+        >>> stem_signal = hs.signals.Signal2D(stem_data)
+        >>> stem_signal.axes_manager[0].name = 'scan_x'        # 24 positions
+        >>> stem_signal.axes_manager[1].name = 'scan_y'        # 16 positions
+        >>> stem_signal.axes_manager[2].name = 'detector_x'    # 128 pixels
+        >>> stem_signal.axes_manager[3].name = 'detector_y'    # 64 pixels
+
+        Create 2D Expression model for diffraction spot:
+
+        >>> model_2d = stem_signal.create_model()
+        >>> spot_2d = hs.model.components1D.Expression(
+        ...     expression="A * exp(-((detector_x-x0)**2 + (detector_y-y0)**2) / (2*sigma**2))",
+        ...     name="diffraction_spot",
         ...     compute_integrals=True
         ... )
+        >>> spot_2d.A.value = 1000.0
+        >>> spot_2d.x0.value = 64.0      # Center x at detector middle
+        >>> spot_2d.y0.value = 32.0      # Center y at detector middle
+        >>> spot_2d.sigma.value = 8.0    # 8-pixel spot size
 
-        This will use symbolic integration for fixed limits:
+        Integrate over detector_x while keeping detector_y fixed:
 
-        >>> result = poly_symbolic.integrate((0, 2), method='auto')
+        >>> # Integration along detector_x direction (preserves y-dependence)
+        >>> x_integrated = spot_2d.integrate((50.0, 78.0), var='detector_x')
 
-        Variable limits will fall back to numerical:
+        **Variable limits integration:**
 
-        >>> results = poly_symbolic.integrate((a_vals, b_vals), method='auto')
+        Handle per-pixel integration limits (advanced use case):
 
-        Force numerical integration:
+        >>> # Different integration ranges for each navigation pixel
+        >>> # Lower limits array (24×16 navigation shape)
+        >>> lower_energy = np.linspace(120, 140, 24*16).reshape(24, 16)
+        >>> upper_energy = np.linspace(160, 180, 24*16).reshape(24, 16)
+        >>>
+        >>> # Variable integration creates result with navigation shape
+        >>> variable_areas = gaussian_peak.integrate((lower_energy, upper_energy))
+        >>> print(f"Variable integration shape: {variable_areas.shape}")  # (24, 16)
 
-        >>> result = poly_symbolic.integrate((0, 2), method='numerical')
-
-        2D component double integration:
+        **2D component double integration:**
 
         >>> expr_2d = hs.model.components2D.Expression(
         ...     expression="a * x * y + b * x**2",
         ...     name="TwoDFunction",
-        ...     a=2.0, b=1.0,
-        ...     compute_integrals=True
-        ... )
+        ...     compute_integrals=True)
+        >>> expr_2d.a.value = 2.0
+        >>> expr_2d.b.value = 1.0
 
         Double integration over x=[0,1], y=[0,2]:
 
         >>> result = expr_2d.integrate([(0, 1), (0, 2)], ('x', 'y'), method='symbolic')
 
-        Runtime parameter substitution for Expression components:
+        **Parameter Override for Sensitivity Analysis**
+
+        Test component behavior with different parameter values:        >>> # Override parameters without changing component state
+        >>> sensitivity_results = {}
+        >>> for sigma_test in [3.0, 5.0, 7.0]:
+        ...     area = gaussian_peak.integrate((140.0, 160.0), sigma=sigma_test)
+        ...     sensitivity_results[sigma_test] = area
+        >>>
+        >>> print("Sensitivity to sigma:")
+        >>> for sigma, area in sensitivity_results.items():
+        ...     print(f"  σ = {sigma:.1f} eV → Area = {area:.1f} counts·eV")
+
+        **Runtime parameter substitution:**
 
         >>> result = poly.integrate((0, 2), parameters_values=[2.0, 1.0, 0.5])
 
-        Indefinite integration (returns a lambda function):
+        **Improper integration with infinite bounds:**
 
-        >>> indefinite_poly = hs.model.components1D.Expression(
-        ...     expression="a * x**2 + b * x + c",
-        ...     name="Polynomial",
-        ...     a=1.0, b=2.0, c=3.0,
-        ...     compute_integrals=True
-        ... )
+        >>> # Create exponential decay component
+        >>> exp_decay = hs.model.components1D.Expression(
+        ...     expression="a * exp(-x / tau)",
+        ...     name="ExponentialDecay",
+        ...     compute_integrals=True)
+        >>> exp_decay.a.value = 1.0
+        >>> exp_decay.tau.value = 2.0
 
-        Get indefinite integral function:
+        Integrate from 0 to infinity:
 
-        >>> integral_func = indefinite_poly.integrate(limits=None, method='symbolic')
-        >>> result_at_2 = integral_func(2)  # Evaluate at x=2
-        >>> result_at_0 = integral_func(0)  # Evaluate at x=0
-        >>> definite_result = result_at_2 - result_at_0  # Same as integrate((0, 2))
+        >>> result = exp_decay.integrate((0, np.inf))
+        >>> print(f"∫₀^∞ e^(-x/τ) dx = {result:.3f}")
+
+        See Also
+        --------
+        :meth:`hyperspy.component.Component.integrate` : Base component integration
+
+        Notes
+        -----
+        - Improper integration requires ``compute_integrals=True`` when creating the component
+        - Symbolic integration uses SymPy and requires expressions with analytical antiderivatives
+        - Variable limits integration currently uses numerical methods only
+        - For 2D components, single-variable integration requires fixed values for other variables
+        - Infinite bounds are supported: use numpy.inf, float('inf'), or similar
         """
-        # Handle indefinite integration (limits=None)
-        if limits is None:
-            return self._integrate_indefinite(
-                variable, method, parameters_values, **kwargs
-            )
+
+        # Check if we have improper integration (infinite bounds)
+        has_infinite_bounds = self._has_infinite_bounds(limits)
 
         # Check if we have variable limits first
         nav_shape = getattr(self, "_navigation_shape", None)
         is_variable_limits, parsed_limits = self._parse_limits(limits, nav_shape)
 
-        # For variable limits, symbolic integration is not currently supported
-        # Fall back to numerical integration via parent Component class
+        # Handle variable limits (not improper integration)
         if is_variable_limits:
             if method == "symbolic":
                 raise NotImplementedError(
@@ -989,14 +1097,51 @@ class Expression(Component):
                     "Use method='numerical' or 'auto' for variable limits integration."
                 )
 
-            # Use parent class's variable limits integration
+            # Use numerical integration for variable limits
             if parameters_values is not None:
-                # Need to handle parameter substitution for variable limits
                 return self._integrate_numerical_variable_with_params(
                     parsed_limits, variable, parameters_values, **kwargs
                 )
             else:
                 return super().integrate(limits, variable, method="numerical", **kwargs)
+
+        # Handle improper integration with infinite bounds
+        if has_infinite_bounds:
+            # Try symbolic improper integration first if available and requested
+            try:
+                import importlib.util
+
+                symbolic_available = importlib.util.find_spec("sympy") is not None
+            except ImportError:
+                symbolic_available = False
+
+            if method in ("auto", "symbolic") and symbolic_available:
+                try:
+                    return self._integrate_symbolic_improper(
+                        limits, variable, parameters_values=parameters_values, **kwargs
+                    )
+                except DivergentIntegralError:
+                    # Always re-raise divergent integral errors - don't fall back to numerical
+                    raise
+                except Exception as e:
+                    if method == "symbolic":
+                        raise NotImplementedError(
+                            f"Symbolic improper integration failed: {e}"
+                        )
+                    # Fall through to numerical for 'auto' only for non-divergent failures
+
+            # Use numerical integration for improper bounds
+            if method in ("auto", "numerical"):
+                if parameters_values is not None:
+                    return self._integrate_numerical_with_params(
+                        limits, variable, parameters_values, **kwargs
+                    )
+                else:
+                    return super().integrate(
+                        limits, variable, method="numerical", **kwargs
+                    )
+
+            raise RuntimeError(f"Improper integration failed for method '{method}'")
 
         # For fixed limits, proceed with original logic
         # Validate method
@@ -1432,44 +1577,42 @@ class Expression(Component):
 
         return results if results.size > 1 else results.item()
 
-    def _integrate_indefinite(
-        self, variable, method="symbolic", parameters_values=None, **kwargs
+    def _integrate_symbolic_improper(
+        self, limits, variable, parameters_values=None, **kwargs
     ):
-        """
-        Compute indefinite integral, returning a lambda function.
+        """Perform symbolic improper integration with infinite bounds."""
 
-        Parameters
-        ----------
-        variable : str
-            The variable to integrate over (e.g., 'x', 'y').
-        method : str, default 'symbolic'
-            Integration method. For indefinite integrals, only 'symbolic' is supported.
-        parameters_values : list or None
-            Values to substitute for parameters before integration.
+        # Handle single variable integration
+        if isinstance(variable, str):
+            if variable not in ("x", "y"):
+                raise ValueError(f"Unsupported variable '{variable}'. Use 'x' or 'y'.")
 
-        Returns
-        -------
-        lambda function
-            A function that can be called with variable value(s) to evaluate the indefinite integral.
+            if variable == "y" and not self._is2D:
+                raise ValueError("Variable 'y' is only valid for 2D components")
 
-        Raises
-        ------
-        ValueError
-            If method is not 'symbolic' or if symbolic integration fails.
-        """
-        if method != "symbolic":
-            raise ValueError("Indefinite integration only supports method='symbolic'")
+            if not isinstance(limits, tuple) or len(limits) != 2:
+                raise ValueError("For single variable, limits must be a tuple (a, b)")
 
-        if not self._compute_integrals:
-            raise ValueError(
-                "compute_integrals must be True for indefinite integration"
+            return self._integrate_symbolic_improper_single(
+                limits, variable, parameters_values=parameters_values, **kwargs
             )
 
-        # Get the SymPy expression
-        try:
-            import sympy
-        except ImportError:
-            raise ImportError("SymPy is required for symbolic indefinite integration")
+        # Handle double integration (not yet supported for improper)
+        elif isinstance(variable, tuple):
+            raise NotImplementedError(
+                "Symbolic improper double integration is not yet implemented. "
+                "Use method='numerical' for double improper integration."
+            )
+
+        else:
+            raise ValueError("Variable must be a string or tuple of strings")
+
+    def _integrate_symbolic_improper_single(
+        self, limits, variable, parameters_values=None, **kwargs
+    ):
+        """Perform symbolic improper integration for single variable."""
+        import numpy as np
+        import sympy
 
         # Use provided parameter values or get current values
         if parameters_values is None:
@@ -1480,47 +1623,124 @@ class Expression(Component):
         # Get the original parsed expression
         expr = self._parsed_expr
 
-        # Get the variable symbol
+        # Extract the symbol objects for the variable
         var_symbol = None
         for s in expr.free_symbols:
-            if str(s) == variable:
+            if s.name == variable:
                 var_symbol = s
                 break
 
         if var_symbol is None:
             raise ValueError(f"Variable '{variable}' not found in expression")
 
-        # Compute indefinite integral
-        try:
-            indefinite_integral = sympy.integrate(expr, var_symbol)
-        except Exception as e:
-            raise ValueError(f"Symbolic indefinite integration failed: {e}")
-
         # Get parameter symbols and substitute values
-        parameter_symbols = []
-        for s in indefinite_integral.free_symbols:
-            if str(s) != variable:
-                parameter_symbols.append(s)
+        parameter_symbols = [s for s in expr.free_symbols if s.name != variable]
+        parameter_symbols.sort(key=lambda s: s.name)  # Keep consistent ordering
 
-        parameter_symbols.sort(key=lambda s: str(s))  # Keep consistent ordering
-
-        # Substitute parameter values into the indefinite integral
-        substituted_integral = indefinite_integral
+        # Substitute parameter values
+        substituted_expr = expr
         for param_symbol, param_value in zip(parameter_symbols, param_values):
-            substituted_integral = substituted_integral.subs(param_symbol, param_value)
+            substituted_expr = substituted_expr.subs(param_symbol, param_value)
 
-        # Convert to a callable function
-        def integral_function(value):
-            """Evaluate the indefinite integral at given point."""
-            result = substituted_integral.subs(var_symbol, value)
-            # Handle the SymPy result conversion carefully
+        # Handle different types of infinite bounds
+        lower, upper = limits
+
+        # Convert numpy infinities to sympy infinities
+        if np.isinf(lower):
+            lower = -sympy.oo if lower < 0 else sympy.oo
+        if np.isinf(upper):
+            upper = sympy.oo if upper > 0 else -sympy.oo
+
+        # For 2D components integrating over one variable, substitute fixed values
+        if self._is2D:
+            other_var = "y" if variable == "x" else "x"
+            if other_var in kwargs:
+                other_val = kwargs[other_var]
+                other_symbol = None
+                for s in substituted_expr.free_symbols:
+                    if s.name == other_var:
+                        other_symbol = s
+                        break
+                if other_symbol is not None:
+                    substituted_expr = substituted_expr.subs(other_symbol, other_val)
+            else:
+                raise ValueError(
+                    f"For 2D component integration over '{variable}', "
+                    f"must provide '{other_var}' value as keyword argument"
+                )
+
+        try:
+            # Compute the improper integral using SymPy
+            result = sympy.integrate(substituted_expr, (var_symbol, lower, upper))
+
+            # Check for divergent results
+            if result == sympy.oo or result == -sympy.oo:
+                raise DivergentIntegralError(
+                    f"The integral from {limits[0]} to {limits[1]} diverges to infinity. "
+                    f"This integral cannot be computed as it is mathematically divergent."
+                )
+            elif result.has(sympy.oo):
+                raise DivergentIntegralError(
+                    f"The integral from {limits[0]} to {limits[1]} contains infinite terms. "
+                    f"This integral cannot be computed as it is mathematically divergent."
+                )
+            else:
+                # Try to evaluate the result numerically
+                try:
+                    # Use str conversion for robust evaluation
+                    result_str = str(result.evalf())
+                    # Parse as float if possible
+                    final_result = float(result_str)
+                    if np.isfinite(final_result):
+                        return final_result
+                    else:
+                        raise ValueError("Integral evaluates to non-finite value")
+                except (TypeError, ValueError, AttributeError) as e:
+                    raise ValueError(f"Cannot evaluate symbolic improper integral: {e}")
+
+        except DivergentIntegralError:
+            # Always re-raise divergent integral errors
+            raise
+        except Exception as e:
+            # Re-raise as more specific error for better error handling
+            raise NotImplementedError(f"Symbolic improper integration failed: {e}")
+
+    def _has_infinite_bounds(self, limits):
+        """Check if limits contain infinite bounds for improper integration."""
+        import numpy as np
+
+        if not isinstance(limits, (tuple, list)):
+            return False
+
+        # Handle single variable case (a, b)
+        if len(limits) == 2 and not isinstance(limits[0], (tuple, list)):
+            a, b = limits
+            # Handle case where a or b might be arrays
             try:
-                return float(result.evalf())  # type: ignore
-            except AttributeError:
-                # For older SymPy versions or different result types
-                return float(result)  # type: ignore
+                return np.any(np.isinf(a)) or np.any(np.isinf(b))
+            except (TypeError, ValueError):
+                # If np.isinf fails, they're probably not numeric
+                return False
 
-        return integral_function
+        # Handle double integration case [(a1, b1), (a2, b2)]
+        if len(limits) == 2 and isinstance(limits[0], (tuple, list)):
+            for limit_pair in limits:
+                if len(limit_pair) == 2:
+                    a, b = limit_pair
+                    try:
+                        if np.any(np.isinf(a)) or np.any(np.isinf(b)):
+                            return True
+                    except (TypeError, ValueError):
+                        continue
+
+        # Handle variable limits - check if any bounds are infinite
+        try:
+            limits_array = np.asarray(limits)
+            return np.any(np.isinf(limits_array))
+        except (ValueError, TypeError):
+            return False
+
+        return False
 
 
 def _check_parameter_linearity(expr, name):

@@ -86,17 +86,18 @@ INTEGRATION_PARAMETERS_DOCSTRING = """        limits : tuple or list of tuples
         method : str, default 'numerical'
             Integration method to use:
 
-            * 'auto' : automatically select best available method (falls back to
+            - 'auto' : automatically select best available method (falls back to
               'numerical')
-            * 'numerical' : use scipy.integrate.quad/dblquad for numerical
+            - 'numerical' : use scipy.integrate.quad/dblquad for numerical
               integration
-            * 'symbolic' : analytical integration (raises NotImplementedError for
+            - 'symbolic' : analytical integration (raises NotImplementedError for
               base Component)
+
         **kwargs
             Additional keyword arguments:
 
-            * For marginal integration of 2D components: fixed variable values (e.g., y=1.0)
-            * For scipy.integrate: additional integration options (epsabs, epsrel, etc.)"""
+            - For marginal integration of 2D components: fixed variable values (e.g., y=1.0)
+            - For scipy.integrate: additional integration options (epsabs, epsrel, etc.)"""
 
 INTEGRATION_ND_PARAMETERS_DOCSTRING = """        limits : tuple or list of tuples
             Integration limits for the variable(s). For single variable: (a, b).
@@ -107,9 +108,10 @@ INTEGRATION_ND_PARAMETERS_DOCSTRING = """        limits : tuple or list of tuple
         method : str, default 'numerical'
             Integration method to use:
 
-            * 'auto' : automatically select best available method (falls back to 'numerical')
-            * 'numerical' : use scipy.integrate.quad/dblquad for numerical integration
-            * 'symbolic' : analytical integration (raises NotImplementedError for base Component)
+            - 'auto' : automatically select best available method (falls back to 'numerical')
+            - 'numerical' : use scipy.integrate.quad/dblquad for numerical integration
+            - 'symbolic' : analytical integration (raises NotImplementedError for base Component)
+
         **kwargs
             Additional keyword arguments passed to the integration backend."""
 

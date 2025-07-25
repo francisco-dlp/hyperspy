@@ -209,13 +209,19 @@ class TestScalableFixedPattern:
         sfp = hs.model.components1D.ScalableFixedPattern(pattern_signal)
 
         # Test invalid limits format
-        with pytest.raises(ValueError, match="limits must be a tuple of length 2"):
+        with pytest.raises(
+            ValueError, match="For fixed limits, must be a tuple of length 2"
+        ):
             sfp.integrate([0, 3])  # List instead of tuple
 
-        with pytest.raises(ValueError, match="limits must be a tuple of length 2"):
+        with pytest.raises(
+            ValueError, match="For fixed limits, must be a tuple of length 2"
+        ):
             sfp.integrate((0, 3, 5))  # Too many elements
 
-        with pytest.raises(ValueError, match="limits must be a tuple of length 2"):
+        with pytest.raises(
+            ValueError, match="For fixed limits, must be a tuple of length 2"
+        ):
             sfp.integrate(5)  # Not a tuple
 
     def test_integrate_api_compatibility(self):

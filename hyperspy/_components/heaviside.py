@@ -68,6 +68,7 @@ class HeavisideStep(Expression):
             # NameError: name 'DiracDelta' is not defined
             # See https://github.com/sympy/sympy/issues/26663#issuecomment-2160451385
             compute_gradients=compute_gradients,
+            compute_integrals=False,  # Disable symbolic integration due to sympy limitations
             autodoc=False,
             **kwargs,
         )

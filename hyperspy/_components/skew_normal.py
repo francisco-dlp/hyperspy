@@ -161,6 +161,7 @@ class SkewNormal(Expression):
             shape=shape,
             module=module,
             autodoc=False,
+            compute_integrals=False,  # Disable symbolic integration due to sympy limitations
             rename_pars={"_shape": "shape"},
             **kwargs,
         )

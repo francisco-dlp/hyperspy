@@ -102,6 +102,7 @@ class Doniach(Expression):
             alpha=alpha,
             module=module,
             autodoc=False,
+            compute_integrals=False,  # Disable symbolic integration due to sympy limitations
             **kwargs,
         )
         #

@@ -97,7 +97,7 @@ class Gaussian2D(Expression):
             position=("centre_x", "centre_y"),
             module=module,
             autodoc=False,
-            compute_integrals=True,  # Enable symbolic integration by default
+            compute_integrals=False,  # Disable symbolic integration due to sympy limitations with 2D
             **kwargs,
         )
 
