@@ -79,11 +79,11 @@ class TestAxesManager:
 
     def test_reprs(self):
         repr(self.am)
-        self.am._repr_html_
+        self.am._repr_html_()
         self.am[0].convert_to_non_uniform_axis()
         self.am[-1].convert_to_non_uniform_axis()
         repr(self.am)
-        self.am._repr_html_
+        self.am._repr_html_()
 
     def test_update_from(self):
         am = self.am
