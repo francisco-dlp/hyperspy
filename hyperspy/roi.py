@@ -56,6 +56,7 @@ import traits.api as t
 from hyperspy import signals
 from hyperspy.axes import UniformDataAxis
 from hyperspy.drawing import widgets
+from hyperspy.drawing.widget_bridge import WidgetAxisBridge
 from hyperspy.events import Event, Events
 from hyperspy.interactive import interactive
 from hyperspy.misc import utils
@@ -565,8 +566,16 @@ class BaseInteractiveROI(BaseROI):
             ax = _get_mpl_ax(signal._plot, axes)
             widget.set_mpl_ax(ax)
 
+        if hasattr(ax.hspy_fig, "widget_host") and ax.hspy_fig.widget_host is not None:
+            ax.hspy_fig.widget_host.add(widget)
+
         # Set DataAxes
         widget.axes = axes
+
+        bridge = WidgetAxisBridge(widget, signal.axes_manager, axes)
+        self._bridges = getattr(self, "_bridges", {})
+        self._bridges[id(widget)] = bridge
+
         with widget.events.changed.suppress_callback(self._on_widget_change):
             self._apply_roi2widget(widget)
 
@@ -585,6 +594,14 @@ class BaseInteractiveROI(BaseROI):
 
         # Connect widget changes to on_widget_change
         widget.events.changed.connect(self._on_widget_change, {"obj": "widget"})
+
+        def _bridge_on_widget_change(widget):
+            bridge = self._bridges.get(id(widget))
+            if bridge is not None:
+                bridge.push_position(widget.position)
+
+        widget.events.changed.connect(_bridge_on_widget_change, {"obj": "widget"})
+
         # When widget closes, remove from internal list
         widget.events.closed.connect(self._remove_widget, {"obj": "widget"})
         self.widgets.add(widget)
@@ -596,6 +613,13 @@ class BaseInteractiveROI(BaseROI):
     def _remove_widget(self, widget, render_figure=True):
         widget.events.closed.disconnect(self._remove_widget)
         widget.events.changed.disconnect(self._on_widget_change)
+        bridge = getattr(self, "_bridges", {}).pop(id(widget), None)
+        if bridge is not None:
+            bridge.disconnect(callback=None)
+        if widget.ax is not None and hasattr(widget.ax, "hspy_fig"):
+            widget_host = getattr(widget.ax.hspy_fig, "widget_host", None)
+            if widget_host is not None:
+                widget_host.remove(widget)
         widget.close(render_figure=render_figure)
         for signal, w in self.signal_map.items():
             if w[0] == widget:

@@ -51,6 +51,7 @@ class BlittedFigure:
         self.ax = None
         self.title = ""
         self.ax_markers = list()
+        self.widget_host = None
 
     def create_figure(self, **kwargs):
         """
@@ -132,6 +133,8 @@ class BlittedFigure:
         self._background = None
         for marker in self.ax_markers:
             marker.close(render_figure=False)
+        if self.widget_host is not None:
+            self.widget_host.clear()
         self.events.closed.trigger(obj=self)
         for f in self.events.closed.connected:
             self.events.closed.disconnect(f)

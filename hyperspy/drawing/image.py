@@ -31,6 +31,7 @@ from traits.api import Undefined
 from hyperspy.docstrings.plot import PLOT2D_DOCSTRING
 from hyperspy.drawing import utils, widgets
 from hyperspy.drawing.figure import BlittedFigure
+from hyperspy.drawing.widget_host import WidgetHost
 from hyperspy.misc import math_tools
 from hyperspy.misc.test_utils import ignore_warning
 from hyperspy.signal_tools import ImageContrastEditor
@@ -322,6 +323,7 @@ class ImagePlot(BlittedFigure):
             self.ax.set_xticks([])
             self.ax.set_yticks([])
         self.ax.hspy_fig = self
+        self.widget_host = WidgetHost()
         if self.axes_off:
             self.ax.axis("off")
 

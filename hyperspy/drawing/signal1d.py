@@ -27,6 +27,7 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 from hyperspy.drawing import utils
 from hyperspy.drawing.figure import BlittedFigure
+from hyperspy.drawing.widget_host import WidgetHost
 from hyperspy.events import Event, Events
 from hyperspy.misc.test_utils import ignore_warning
 
@@ -67,6 +68,7 @@ class Signal1DFigure(BlittedFigure):
         self.ax.yaxis.set_animated(animated)
         self.ax.xaxis.set_animated(animated)
         self.ax.hspy_fig = self
+        self.widget_host = WidgetHost()
 
     def create_right_axis(self, color="black", adjust_layout=True):
         """
@@ -87,6 +89,7 @@ class Signal1DFigure(BlittedFigure):
         if self.right_ax is None:
             self.right_ax = self.ax.twinx()
             self.right_ax.hspy_fig = self
+            self.right_widget_host = WidgetHost()
             self.right_ax.yaxis.set_animated(self.figure.canvas.supports_blit)
             self.right_ax.tick_params(axis="y", labelcolor=color)
             # Needs to set the zorder of the ax to get the mouse event for ax
