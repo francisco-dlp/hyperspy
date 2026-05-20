@@ -202,6 +202,15 @@ doctest_optionflags = [
     "ELLIPSIS",
 ]
 
+[tool.hyperspy.staged_package]
+# Explicit repo-root verification entry points for the staged widget and events packages.
+# These stay opt-in so the default HyperSpy test and coverage settings remain
+# scoped to the main package until the staged package is bootstrapped.
+test_paths = ["packages/hyperspy_widgets/tests", "packages/hyperspy_events/tests"]
+docs_paths = ["packages/hyperspy_widgets/docs", "packages/hyperspy_events/docs"]
+pytest_command = "python -m pytest packages/hyperspy_widgets/tests packages/hyperspy_events/tests -q"
+docs_command = "python -m sphinx -b html packages/hyperspy_events/docs packages/hyperspy_events/docs/_build/html"
+
 [tool.ruff]
 exclude = [
     "hyperspy/external/*",
@@ -232,7 +241,7 @@ extend-ignore = ["E501"]
 ]
 
 [tool.setuptools.packages.find]
-include = ["hyperspy*"]
+include = ["hyperspy", "hyperspy.*"]
 where = ["."]
 
 [tool.setuptools.exclude-package-data]

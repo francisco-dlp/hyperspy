@@ -19,7 +19,7 @@
 import numpy as np
 import traits.api as t
 
-from hyperspy.drawing.widgets import Line2DWidget, VerticalLineWidget
+from hyperspy.drawing import widgets
 from hyperspy.exceptions import SignalDimensionError
 
 
@@ -97,7 +97,9 @@ class LineInSignal2D(t.HasTraits):
             return
 
         if new is True and old is False:
-            self._line = Line2DWidget(self.signal.axes_manager, color=self._color)
+            self._line = widgets.Line2DWidget(
+                self.signal.axes_manager, color=self._color
+            )
             self._line.snap_position = self._snap_position
             # The default axis is the navigation axis; specify the signal axis instead.
             self._line.axes = (self._xaxis, self._yaxis)
@@ -205,7 +207,9 @@ class LineInSignal1D(t.HasTraits):
             return
 
         if new is True and old is False:
-            self._line = VerticalLineWidget(self.signal.axes_manager, color=self._color)
+            self._line = widgets.VerticalLineWidget(
+                self.signal.axes_manager, color=self._color
+            )
             # The default axis is the navigation axis; specify the signal axis instead.
             self._line.axes = (self._axis,)
             # connect callback to update position of the tool from the widget

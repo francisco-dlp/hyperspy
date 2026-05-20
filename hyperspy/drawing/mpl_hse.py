@@ -23,7 +23,7 @@ import numpy as np
 from traits.api import Undefined
 
 from hyperspy.drawing import signal1d
-from hyperspy.drawing.mpl_he import MPL_HyperExplorer
+from hyperspy.drawing.mpl_he import MPL_HyperExplorer, _attach_pointer_adapter
 
 
 class MPL_HyperSignal1D_Explorer(MPL_HyperExplorer):
@@ -151,7 +151,10 @@ class MPL_HyperSignal1D_Explorer(MPL_HyperExplorer):
             if hasattr(self.pointer, "size"):
                 self.right_pointer.size = self.pointer.size
             self.right_pointer.color = "blue"
-            self.right_pointer.connect_navigate()
+            _attach_pointer_adapter(
+                self.right_pointer, self.signal_plot.right_axes_manager
+            )
+            self.right_pointer.connect_axis_source()
             self.right_pointer.set_mpl_ax(self.navigator_plot.ax)
 
         if self.right_pointer is not None:

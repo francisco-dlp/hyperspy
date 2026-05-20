@@ -23,6 +23,7 @@ import cloudpickle
 import numpy as np
 
 from hyperspy import signals
+from hyperspy.drawing import widgets
 from hyperspy.external.progressbar import progressbar
 from hyperspy.misc import utils
 from hyperspy.misc.math_tools import check_random_state
@@ -526,8 +527,6 @@ class Samfire:
             self.optional_components = new_list
 
     def _request_user_input(self):
-        from hyperspy.drawing.widgets import SquareWidget
-
         mark = signals.Signal1D(
             self.metadata.marker,
             axes=self.model.axes_manager._get_navigation_axes_dicts(),
@@ -548,10 +547,10 @@ class Samfire:
 
         mark.plot(navigator="slider")
 
-        w = SquareWidget(self.model.axes_manager)
+        w = widgets.SquareWidget(self.model.axes_manager)
         w.color = "yellow"
         w.set_mpl_ax(mark._plot.signal_plot.ax)
-        w.connect_navigate()
+        w.connect_axis_source()
 
         def connect_other_navigation1(axes_manager):
             with mark.axes_manager.events.indices_changed.suppress_callback(

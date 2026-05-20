@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hyperspy-widgets"
+version = "0.0.0"
+description = "Standalone staged package for HyperSpy widget core"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "GPL-3.0-or-later"
+authors = [{name = "The HyperSpy Community"}]
+dependencies = ["hyperspy-events", "matplotlib", "numpy", "packaging"]
+
+[project.urls]
+Homepage = "https://github.com/hyperspy/hyperspy"
+Source = "https://github.com/hyperspy/hyperspy"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]

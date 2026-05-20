@@ -18,22 +18,8 @@
 import numpy as np
 
 from hyperspy import roi, signals
-from hyperspy.drawing import widget, widgets
+from hyperspy.drawing import widgets
 from hyperspy.misc.test_utils import mock_event
-
-
-def test_get_step():
-    s = signals.Signal1D(np.zeros((4, 4)))
-    axis = s.axes_manager.navigation_axes[0]
-    step = widget.ResizableDraggableWidgetBase._get_step(
-        s, s.axes_manager.navigation_axes[0]
-    )
-    assert step == 1
-    axis.index = 3
-    step = widget.ResizableDraggableWidgetBase._get_step(
-        s, s.axes_manager.navigation_axes[0]
-    )
-    assert step == 1
 
 
 def test_scalebar_remove():
@@ -55,7 +41,6 @@ def test_remove_widget_line():
     assert isinstance(s._plot.pointer, widgets.HorizontalLineWidget)
     assert len(s._plot.pointer.patch) == 1
 
-    # Remove pointer
     s._plot.pointer.close(render_figure=True)
     assert len(ax.lines) == 1
     assert len(s._plot.pointer.patch) == 1
@@ -68,7 +53,6 @@ def test_remove_widget_line():
     assert isinstance(im._plot.pointer, widgets.VerticalLineWidget)
     assert len(im._plot.pointer.patch) == 1
 
-    # Remove pointer
     im._plot.pointer.close(render_figure=True)
     assert len(ax.lines) == 1
     assert len(im._plot.pointer.patch) == 1
@@ -78,7 +62,6 @@ def test_add_widget_line():
     s = signals.Signal1D(np.arange(10 * 25).reshape(10, 25))
     s.plot()
 
-    # check the default position of the line on the signal axis
     line = widgets.VerticalLineWidget(s.axes_manager, color="blue")
     axis = s.axes_manager.signal_axes[0]
     line.axes = (axis,)
@@ -87,10 +70,8 @@ def test_add_widget_line():
     line.position = (15,)
     assert line.position == (15,)
     line.position = (100,)
-    # high value is used
     assert line.position == (24,)
 
-    # check the default position of the line on the navigation axis
     s.plot(navigator="spectrum")
     line = widgets.VerticalLineWidget(s.axes_manager, color="blue")
     axis = s.axes_manager.navigation_axes[0]
@@ -100,26 +81,19 @@ def test_add_widget_line():
     line.position = (5,)
     assert line.position == (5,)
     line.position = (15,)
-    # high value is used
     assert line.position == (9,)
 
 
 def test_calculate_size():
     s = signals.Signal2D(np.arange(10000).reshape(10, 10, 10, 10))
-
-    # Test that scalebar.calculate_size passes only positive value to closest_nice_number
     s.axes_manager[0].scale = -1
     s.plot()
 
 
 def test_adding_removing_resizers_on_pick_event():
-    """
-    Test adding and removing resizers on pick events
-    """
     s = signals.Signal2D(np.random.random((10, 10)))
 
     xx2, yy2, xx1, yy1 = 0, 0, 2, 2
-
     shiftx = 5
     shifty = 3
 
@@ -139,19 +113,16 @@ def test_adding_removing_resizers_on_pick_event():
 
     fig = s._plot.signal_plot.figure
 
-    # PickEvent on widget0
     mouseevent0 = mock_event(fig, fig.canvas, xdata=1, ydata=1, artist=widget0.patch[0])
     pickevent0 = mock_event(
         fig, fig.canvas, artist=widget0.patch[0], mouseevent=mouseevent0
     )
 
-    # PickEvent on widget1
     mouseevent1 = mock_event(fig, fig.canvas, xdata=6, ydata=4, artist=widget1.patch[0])
     pickevent1 = mock_event(
         fig, fig.canvas, artist=widget1.patch[0], mouseevent=mouseevent1
     )
 
-    # PickEvent outside widget0 and widget1
     mouseevent2 = mock_event(fig, fig.canvas, xdata=8, ydata=8)
     pickevent2 = mock_event(fig, fig.canvas, mouseevent=mouseevent2)
 

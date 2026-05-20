@@ -26,3 +26,5 @@ HyperSpy is a community project maintained for and by its users. There are many 
     lazy_import.rst
     useful_information.rst
     maintenance.rst
+    widget_package_boundary.rst
+    events_package_boundary.rst

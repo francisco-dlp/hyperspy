@@ -25,6 +25,7 @@ import traits.api as t
 import hyperspy.drawing
 from hyperspy import signal_tools
 from hyperspy.decorators import interactive_range_selector
+from hyperspy.drawing import widgets
 from hyperspy.events import EventSuppressor
 from hyperspy.exceptions import SignalDimensionError
 from hyperspy.misc import utils
@@ -956,14 +957,14 @@ class Model1D(BaseModel):
             return
         axis = self.axes_manager.signal_axes[0]
         # Create the vertical line and labels
-        widgets = [hyperspy.drawing.widgets.VerticalLineWidget(self.axes_manager)]
+        position_widgets = [widgets.VerticalLineWidget(self.axes_manager)]
         if show_label:
-            label = hyperspy.drawing.widgets.LabelWidget(self.axes_manager)
+            label = widgets.LabelWidget(self.axes_manager)
             label.string = component._get_short_description().replace(" component", "")
-            widgets.append(label)
+            position_widgets.append(label)
 
-        self._position_widgets[component._position] = widgets
-        for w in widgets:
+        self._position_widgets[component._position] = position_widgets
+        for w in position_widgets:
             # Setup widget
             w.axes = (axis,)
             w.snap_position = False
@@ -979,8 +980,8 @@ class Model1D(BaseModel):
             w.events.closed.connect(self._on_position_widget_close, {"obj": "widget"})
 
     def _reverse_lookup_position_widget(self, widget):
-        for parameter, widgets in self._position_widgets.items():
-            if widget in widgets:
+        for parameter, position_widgets in self._position_widgets.items():
+            if widget in position_widgets:
                 return parameter
         raise KeyError()
 

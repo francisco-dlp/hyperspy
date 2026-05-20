@@ -32,6 +32,20 @@ _logger = logging.getLogger(__name__)
 _lock = Lock()
 
 
+def _attach_pointer_adapter(pointer, axis_source):
+    pointer.axes_manager = axis_source
+
+    def _set_indices(indices):
+        pointer.index_position = indices
+
+    def _on_navigate(updated_axis_source):
+        if updated_axis_source is pointer.axis_source:
+            pointer.position = tuple(axis.value for axis in pointer.axes)
+
+    pointer._set_indices = _set_indices
+    pointer._on_navigate = _on_navigate
+
+
 def _is_widget_backend():
     backend = matplotlib.get_backend()
     # in ipympl 0.9.4/ipython 8.24, the backend name changed from ipympl to widget
@@ -227,7 +241,8 @@ class MPL_HyperExplorer:
                     self.pointer = pointer(self.axes_manager)
                     self.pointer.is_pointer = True
                     self.pointer.color = "red"
-                    self.pointer.connect_navigate()
+                    _attach_pointer_adapter(self.pointer, self.axes_manager)
+                    self.pointer.connect_axis_source()
                 self.plot_navigator(**kwargs.pop("navigator_kwds", {}))
                 if pointer is not None:
                     self.events.closed.connect(self.pointer.disconnect, [])
