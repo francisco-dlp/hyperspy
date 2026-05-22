@@ -20,6 +20,8 @@ Matplotlib-based interactive plotting engine. Handles the `signal.plot()` infras
 | `markers.py` | Public markers entry point |
 | `widget.py` | Navigator widget base |
 | `widgets.py` | Concrete interactive widgets (crosshair, range, etc.) |
+| `widget_host.py` | `WidgetHost` — manages widgets on one matplotlib Axes (selection, add/remove/clear, event lifecycle) |
+| `widget_bridge.py` | `WidgetAxisBridge` — bidirectional sync between widget position and `AxesManager` axes (snap grid, push/pull) |
 | `tiles.py` | Tiled signal display |
 | `utils.py` | Plot utility helpers |
 
@@ -38,6 +40,8 @@ Matplotlib-based interactive plotting engine. Handles the `signal.plot()` infras
 - Interactive updates rely on `events.py` — do not poll; connect/disconnect event handlers.
 - Use blit (`figure.render_figure()`) for performance-critical animations.
 - Markers are composable: each marker type in `_markers/` is independent; they are collected by `markers.py`.
+- **Widget decoupling**: `WidgetHost` owns widget lifecycle per Axes; `WidgetAxisBridge` encapsulates all `AxesManager` knowledge. Widgets should never access `AxesManager` directly — use the bridge for position sync and snap grid computation.
+- The drawing module depends on the staged `hyperspy_widgets` and `hyperspy_events` packages in `packages/` for widget primitives and event infrastructure.
 
 ### Testing Requirements
 
@@ -51,7 +55,9 @@ Use `matplotlib.use('Agg')` or the `mpl_cleanup` fixture for non-interactive tes
 
 ### Internal
 - `hyperspy/events.py` — reactive event system
+- `hyperspy/axes.py` — `AxesManager` drives snap grid and position sync via `WidgetAxisBridge`
 - `hyperspy/roi.py` — ROI widgets connect to drawing widgets
+- `hyperspy_events` / `hyperspy_widgets` — staged extraction packages (see `packages/`) for event primitives and pure widget core
 
 ### External
 - `matplotlib` — entire rendering stack

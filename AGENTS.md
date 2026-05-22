@@ -25,6 +25,7 @@ HyperSpy is a Python library for multi-dimensional data analysis, specialising i
 | Directory | Purpose |
 |-----------|---------|
 | `hyperspy/` | Main Python package (see `hyperspy/AGENTS.md`) |
+| `packages/` | Staged extraction packages — `hyperspy_events` and `hyperspy_widgets` (see `packages/hyperspy_events/AGENTS.md`, `packages/hyperspy_widgets/AGENTS.md`) |
 | `doc/` | Sphinx documentation source (see `doc/AGENTS.md`) |
 | `examples/` | Gallery example scripts (see `examples/AGENTS.md`) |
 | `upcoming_changes/` | Towncrier news fragments for the next release (see `upcoming_changes/AGENTS.md`) |
