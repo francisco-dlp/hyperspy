@@ -1591,7 +1591,7 @@ class LazySignal(signals.BaseSignal):
     def decomposition(
         self,
         normalize_poissonian_noise=False,
-        algorithm="SVD",
+        algorithm="incremental",
         output_dimension=None,
         centre=None,
         auto_transpose=True,
@@ -1616,7 +1616,8 @@ class LazySignal(signals.BaseSignal):
         Parameters
         ----------
         %s
-        algorithm : {'SVD', 'PCA', 'ORPCA', 'ORNMF', 'NMF'} or object, default 'SVD'
+        algorithm : {'incremental', 'SVD', 'PCA', 'ORPCA', 'ORNMF', 'NMF'} \
+or object, default 'incremental'
             The decomposition algorithm to use. In addition to the named
             algorithms, any object that implements ``partial_fit`` (and
             ``transform`` or ``fit_transform``) can be passed directly and
@@ -1626,6 +1627,14 @@ class LazySignal(signals.BaseSignal):
             before calling ``fit_transform``.  After fitting, the estimator
             must expose a ``components_`` attribute (rows = components) to
             supply the components.
+
+            * ``'incremental'`` (default): delegates to
+              ``hyperspy-ml``
+              :class:`~hyperspy_ml_algorithms.IncrementalSVD` when
+              ``hyperspy-ml`` is installed, falling back to the built-in
+              ``ISVD`` (``svd_solver='incremental'``) otherwise.
+              ``output_dimension`` is required.  Supports ``centre``,
+              ``signal_mask``, ``navigation_mask``, and ``reproject``.
 
             For ``'SVD'``, the specific backend is chosen via ``svd_solver``
             (see below).
@@ -1798,6 +1807,14 @@ class LazySignal(signals.BaseSignal):
             Online robust NMF.
 
         """
+        # ── hyperspy-ml detection ──────────────────────────────────────────
+        try:
+            from hyperspy_ml.api import decompose as _ml_decompose
+
+            _has_hsml = True
+        except ImportError:
+            _has_hsml = False
+
         from hyperspy.learn._mva import _to_flat_bool
 
         if get is None:
@@ -1816,7 +1833,7 @@ class LazySignal(signals.BaseSignal):
         if (
             not _is_custom_sklearn_like
             and isinstance(algorithm, str)
-            and algorithm not in ("SVD", "PCA", "ORPCA", "ORNMF", "NMF")
+            and algorithm not in ("SVD", "PCA", "ORPCA", "ORNMF", "NMF", "incremental")
         ):
             _lazy_unsupported = {
                 "MLPCA",
@@ -1829,12 +1846,14 @@ class LazySignal(signals.BaseSignal):
                 raise NotImplementedError(
                     f"algorithm={algorithm!r} is not supported for lazy signals. "
                     "Supported algorithms are: 'SVD', 'PCA', 'ORPCA', 'ORNMF', 'NMF', "
-                    "or a custom object with fit_transform() or fit()+transform()."
+                    "'incremental', or a custom object with fit_transform() or "
+                    "fit()+transform()."
                 )
             raise ValueError(
                 f"'algorithm' {algorithm!r} not recognised. "
                 "Expected one of: 'SVD', 'PCA', 'ORPCA', 'ORNMF', 'NMF', "
-                "or a custom object with fit_transform() or fit()+transform()."
+                "'incremental', or a custom object with fit_transform() or "
+                "fit()+transform()."
             )
 
         if kwargs.get("var_array") is not None or kwargs.get("var_func") is not None:
@@ -1866,7 +1885,69 @@ class LazySignal(signals.BaseSignal):
 
         self._check_navigation_mask(navigation_mask)
         self._check_signal_mask(signal_mask)
+
+        # num_chunks validation — must run before delegation.
+        if num_chunks is not None and (
+            not isinstance(num_chunks, (int, np.integer))
+            or isinstance(num_chunks, bool)
+            or num_chunks <= 0
+        ):
+            raise ValueError(
+                f"`num_chunks` must be a positive integer, got {num_chunks!r}."
+            )
         # ─────────────────────────────────────────────────────────────────────
+
+        # ── hyperspy-ml delegation ────────────────────────────────────────
+        # Delegate only for the simple (no-centering, no-mask) path.
+        # IncrementalSVD in hyperspy-ml is plain SVD — it does not support
+        # centering.  Mask storage and NaN-filling in learning_results are
+        # handled by the built-in _store_decomposition_results, not the
+        # simpler write_to_signal.
+        if (
+            _has_hsml
+            and algorithm == "incremental"
+            and centre is None
+            and navigation_mask is None
+            and signal_mask is None
+        ):
+            _ml_result = _ml_decompose(
+                self,
+                algorithm="IncrementalSVD",
+                output_dimension=output_dimension,
+                normalize_poissonian_noise=normalize_poissonian_noise,
+                navigation_mask=navigation_mask,
+                signal_mask=signal_mask,
+                svd_solver=svd_solver,
+                **kwargs,
+            )
+            # hyperspy-ml stores components as (n_components, n_features);
+            # HyperSpy convention is (n_features, n_components).
+            if _ml_result.components is not None:
+                _ml_result.components = _ml_result.components.T
+            # IncrementalSVD sets mean_ to zeros even when centre=None.
+            # HyperSpy convention: mean is None when no centering is applied.
+            if _ml_result.mean is not None:
+                _ml_result.mean = None
+            _ml_result.write_to_signal(self)
+            self._unfolded4decomposition = False
+            if print_info:
+                _logger.info(
+                    "Decomposition performed with hyperspy-ml IncrementalSVD "
+                    "(output_dimension=%s)",
+                    output_dimension,
+                )
+            if return_info:
+                return _ml_result
+            return
+
+        # ── Fallback: translate 'incremental' to built-in incremental SVD.
+        #    The delegation block above has already returned for the case
+        #    where it was applicable (hsml + no centering).  Any other
+        #    'incremental' request at this point must go through the
+        #    built-in path (e.g. when centre is not None, or hsml missing).
+        if algorithm == "incremental":
+            algorithm = "SVD"
+            svd_solver = "incremental"
 
         explained_variance = None
         explained_variance_ratio = None
@@ -1881,14 +1962,6 @@ class LazySignal(signals.BaseSignal):
         _al_data = self._data_aligned_with_axes
         nav_chunks = _al_data.chunks[: self.axes_manager.navigation_dimension]
 
-        if num_chunks is not None and (
-            not isinstance(num_chunks, (int, np.integer))
-            or isinstance(num_chunks, bool)
-            or num_chunks <= 0
-        ):
-            raise ValueError(
-                f"`num_chunks` must be a positive integer, got {num_chunks!r}."
-            )
         num_chunks = 1 if num_chunks is None else num_chunks
         blocksize = np.min([utils.multiply(ar) for ar in product(*nav_chunks)])
         nblocks = utils.multiply([len(c) for c in nav_chunks])

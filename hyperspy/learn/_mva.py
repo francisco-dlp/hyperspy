@@ -39,6 +39,9 @@ from hyperspy.misc import utils
 
 MDP_INSTALLED = importlib.util.find_spec("mdp") is not None
 SKLEARN_INSTALLED = importlib.util.find_spec("sklearn") is not None
+_HYPERSPY_ML_INSTALLED = importlib.util.find_spec("hyperspy_ml") is not None
+# Set to True to delegate decomposition to hyperspy-ml when installed.
+_MVA_USE_HYPERSPY_ML = False
 
 _logger = logging.getLogger(__name__)
 
@@ -638,6 +641,67 @@ class MVA:
                     f"Provided algorithm is '{algorithm}'."
                 )
 
+        # --- hyperspy-ml delegation ---
+        # When hyperspy-ml is installed, delegate to its decompose() which
+        # provides a richer algorithm pipeline.  Fall back to the built-in
+        # implementation otherwise (or when using cupy arrays, which
+        # hyperspy-ml does not currently support).
+        _has_hsml = False
+        if _MVA_USE_HYPERSPY_ML:
+            try:
+                from hyperspy_ml import decompose as _ml_decompose
+
+                _has_hsml = True
+            except ImportError:
+                pass
+
+        if _has_hsml:
+            if print_info:
+                print(
+                    "\n".join(
+                        [
+                            "Decomposition info:",
+                            f"  normalize_poissonian_noise={normalize_poissonian_noise}",
+                            f"  algorithm={algorithm}",
+                            f"  output_dimension={output_dimension}",
+                            f"  centre={centre}",
+                        ]
+                    )
+                )
+
+            result = _ml_decompose(
+                signal=self,
+                algorithm=algorithm,
+                output_dimension=output_dimension,
+                centre=centre,
+                normalize_poissonian_noise=normalize_poissonian_noise,
+                navigation_mask=navigation_mask,
+                signal_mask=signal_mask,
+                reproject=reproject,
+                svd_solver=svd_solver,
+                **kwargs,
+            )
+            result.write_to_signal(self)
+            # Hyperspy built-in code (normalize, get_model, export, etc.)
+            # expects components as (n_features, n_components), but the
+            # ml result uses sklearn convention (n_components, n_features).
+            # Transpose to match the built-in expectation.
+            lr = self.learning_results
+            if lr.components is not None and lr.components.ndim == 2:
+                lr.components = lr.components.T
+            if lr.bss_components is not None and lr.bss_components.ndim == 2:
+                lr.bss_components = lr.bss_components.T
+
+            if return_info:
+                warnings.warn(
+                    "`return_info=True` is not supported when delegating "
+                    "to hyperspy-ml. Use the built-in fallback for this "
+                    "feature.",
+                    UserWarning,
+                )
+            return None
+
+        # --- built-in fallback ---
         from hyperspy.signal import BaseSignal
 
         self._validate_decomposition_inputs(output_dimension, centre, reproject)
@@ -1186,6 +1250,69 @@ class MVA:
         plot_bss_components, plot_bss_scores, plot_bss_results
 
         """
+        # Try delegating to hyperspy-ml when available
+        try:
+            from hyperspy_ml import bss as _ml_bss
+
+            _has_hsml = True
+        except ImportError:
+            _has_hsml = False
+
+        if _has_hsml:
+            # Map whiten_method to hyperspy_ml's whitening parameter
+            if whiten_method is None:
+                _whitening = False
+            elif whiten_method.upper() == "ZCA":
+                _whitening = {"method": "zca"}
+            else:
+                _whitening = None  # default PCA
+
+            orig_lr = self.learning_results
+            # The decomposition delegation transposes components from
+            # sklearn (n_components, n_features) to old convention
+            # (n_features, n_components).  Undo that before passing to
+            # the ml BSS code, which expects sklearn convention.
+            if orig_lr.components is not None and orig_lr.components.ndim == 2:
+                orig_lr.components = orig_lr.components.T
+            result = _ml_bss(
+                orig_lr,
+                algorithm=algorithm,
+                number_of_components=number_of_components,
+                on_scores=on_scores,
+                whitening=_whitening,
+                **kwargs,
+            )
+            # Preserve the decomposition results already on the signal.
+            result.write_to_signal(self)
+            bss_lr = self.learning_results
+            for attr in (
+                "components",
+                "scores",
+                "explained_variance",
+                "explained_variance_ratio",
+                "mean",
+                "bH",
+                "decomposition_algorithm",
+                "output_dimension",
+                "centre",
+                "poissonian_noise_normalized",
+                "unfolded",
+                "original_shape",
+                "navigation_mask",
+                "signal_mask",
+            ):
+                val = getattr(orig_lr, attr, None)
+                if val is not None:
+                    bss_lr.__dict__[attr] = val
+            # Transpose components back to old convention and
+            # bss_components from sklearn convention too.
+            for attr_name in ("components", "bss_components"):
+                arr = bss_lr.__dict__.get(attr_name)
+                if arr is not None and arr.ndim == 2:
+                    bss_lr.__dict__[attr_name] = arr.T
+            return
+
+        # Built-in fallback path (when hyperspy-ml is not installed)
         from hyperspy.signal import BaseSignal
 
         lr = self.learning_results
@@ -2455,6 +2582,29 @@ class MVA:
         plot_cluster_labels
 
         """
+        try:
+            from hyperspy_ml import decompose as _  # noqa: F401
+
+            _has_hsml = True
+        except ImportError:
+            _has_hsml = False
+
+        if _has_hsml:
+            warnings.warn(
+                "MVA.plot_cluster_metric() is deprecated. "
+                "Use results.plot_cluster_metric() from hyperspy-ml instead.",
+                VisibleDeprecationWarning,
+            )
+            from hyperspy_ml.results import ClusterResult
+
+            result = ClusterResult()
+            target = self.learning_results
+            result.cluster_metric_data = target.cluster_metric_data
+            result.cluster_metric_index = target.cluster_metric_index
+            result.cluster_metric = target.cluster_metric
+            return result.plot_cluster_metric()
+
+        # --- built-in fallback ---
         import matplotlib.pyplot as plt
 
         target = self.learning_results
@@ -2703,6 +2853,25 @@ class MVA:
             used for clustering. Useful if you wish to examine inertia or other outputs.
 
         """
+        # Try delegating to hyperspy-ml when available
+        try:
+            from hyperspy_ml import cluster as _ml_cluster
+
+            _has_hsml = True
+        except ImportError:
+            _has_hsml = False
+
+        if _has_hsml:
+            result = _ml_cluster(
+                self.learning_results,
+                algorithm=algorithm or "kmeans",
+                cluster_source=cluster_source,
+                **kwargs,
+            )
+            result.write_to_signal(self)
+            return
+
+        # Built-in fallback path (when hyperspy-ml is not installed)
         if not SKLEARN_INSTALLED:
             raise ImportError("Clustering requires scikit-learn.")
 
@@ -3330,6 +3499,7 @@ class LearningResults(object):
     output_dimension = None
     mean = None
     centre = None
+    bH = None
     # Clustering values
     cluster_membership = None
     cluster_labels = None
@@ -3439,6 +3609,113 @@ class LearningResults(object):
             VisibleDeprecationWarning,
         )
 
+    def _populate_from_result(self, result):
+        """Populate this instance from a ``hyperspy-ml`` result object.
+
+        Transfers decomposition, BSS, clustering attributes, and provenance
+        metadata from a :class:`~hyperspy_ml.results.DecompositionResult`,
+        :class:`~hyperspy_ml.results.BSSResult`, or
+        :class:`~hyperspy_ml.results.ClusterResult` into this
+        ``LearningResults`` instance.
+
+        Parameters
+        ----------
+        result : DecompositionResult, BSSResult, or ClusterResult
+            Result object from the ``hyperspy-ml`` package.
+
+        Notes
+        -----
+        This is the core bridge from ``hyperspy-ml`` to HyperSpy.  The
+        ``write_to_signal`` convenience method wraps this and assigns
+        the result to ``signal.learning_results``.
+        """
+        # --- Decomposition attributes -----------------------------------
+        for attr in (
+            "components",
+            "scores",
+            "explained_variance",
+            "explained_variance_ratio",
+            "mean",
+            "bH",
+        ):
+            val = getattr(result, attr, None)
+            if val is not None:
+                self.__dict__[attr] = val
+
+        # --- BSS attributes ---------------------------------------------
+        for attr in (
+            "bss_components",
+            "bss_scores",
+            "unmixing_matrix",
+            "bss_algorithm",
+            "on_scores",
+        ):
+            val = getattr(result, attr, None)
+            if val is not None:
+                self.__dict__[attr] = val
+
+        # --- Clustering attributes --------------------------------------
+        for attr in (
+            "cluster_labels",
+            "cluster_centers",
+            "cluster_algorithm",
+            "cluster_membership",
+            "cluster_metric_data",
+            "cluster_metric_index",
+            "cluster_metric",
+        ):
+            val = getattr(result, attr, None)
+            if val is not None:
+                self.__dict__[attr] = val
+
+        # --- Provenance metadata (_source) -------------------------------
+        source = getattr(result, "_source", None)
+        if isinstance(source, dict):
+            for attr in ("unfolded", "original_shape"):
+                val = source.get(attr)
+                if val is not None:
+                    self.__dict__[attr] = val
+            algo = source.get("decomposition_algorithm")
+            if algo is not None:
+                self.__dict__["decomposition_algorithm"] = algo
+
+        # --- Algorithm parameters (params dict) --------------------------
+        params = getattr(result, "params", None)
+        if isinstance(params, dict):
+            for attr, param_key in (
+                ("output_dimension", "output_dimension"),
+                ("centre", "centre"),
+                ("poissonian_noise_normalized", "normalize_poissonian_noise"),
+                ("decomposition_algorithm", "algorithm"),
+                ("bss_algorithm", "algorithm"),
+                ("cluster_algorithm", "algorithm"),
+            ):
+                val = params.get(param_key)
+                if val is not None:
+                    self.__dict__[attr] = val
+
+        # Use __dict__ access throughout to avoid triggering the
+        # property-deprecation warning chain on setters.
+
+    @classmethod
+    def write_to_signal(cls, result, signal):
+        """Write a ``hyperspy-ml`` result to a signal's ``learning_results``.
+
+        Convenience classmethod that creates a ``LearningResults`` from
+        *result*, populates it, and assigns it to ``signal.learning_results``.
+
+        Parameters
+        ----------
+        result : DecompositionResult, BSSResult, or ClusterResult
+            Result object from the ``hyperspy-ml`` package.  Decomposition,
+            BSS, and clustering attributes are transferred automatically.
+        signal : BaseSignal
+            Target signal that receives ``.learning_results``.
+        """
+        lr = cls()
+        lr._populate_from_result(result)
+        signal.learning_results = lr
+
     def save(self, filename, overwrite=None):
         """Save the result of the decomposition and demixing analysis.
 
@@ -3464,6 +3741,7 @@ class LearningResults(object):
             "output_dimension",
             "mean",
             "centre",
+            "bH",
             "cluster_membership",
             "cluster_labels",
             "cluster_centers",
@@ -3606,6 +3884,102 @@ class LearningResults(object):
         _logger.info(summary_str)
 
         return summary_str
+
+    def to_results(self):
+        """Convert legacy learning_results to a modern DecompositionResult.
+
+        This creates a :class:`~hyperspy_ml.results.base.DecompositionResult`
+        from the legacy :class:`LearningResults` stored on the signal.
+        Unlike :func:`~hyperspy_ml.results.io.extract_results`, this does
+        **not** have access to the originating signal, so provenance
+        metadata will be incomplete.
+
+        Returns
+        -------
+        DecompositionResult
+            Result object with ``components``, ``scores``, and related
+            attributes populated from this LearningResults instance.
+
+        Warns
+        -----
+        UserWarning
+            Always emitted to remind users that calling
+            :func:`~hyperspy_ml.results.io.extract_results(signal)` is
+            the preferred path because it includes signal provenance.
+        """
+        import warnings
+
+        from hyperspy_ml.results.base import (
+            BSSResult,
+            ClusterResult,
+            DecompositionResult,
+        )
+
+        warnings.warn(
+            "Call `extract_results(signal)` for complete provenance.",
+            UserWarning,
+            stacklevel=2,
+        )
+
+        result = DecompositionResult()
+
+        _decomp_attrs = (
+            "components",
+            "scores",
+            "explained_variance",
+            "explained_variance_ratio",
+            "mean",
+            "bH",
+        )
+        for attr in _decomp_attrs:
+            val = getattr(self, attr, None)
+            if val is not None:
+                setattr(result, attr, val)
+
+        source = {}
+        for key in ("unfolded", "decomposition_algorithm", "output_dimension"):
+            val = getattr(self, key, None)
+            if val is not None:
+                source[key] = val
+        if self.original_shape is not None:
+            source["original_shape"] = list(self.original_shape)
+        result._source = source
+
+        if self.bss_algorithm is not None:
+            bss = BSSResult()
+            _bss_attrs = (
+                "bss_components",
+                "bss_scores",
+                "unmixing_matrix",
+                "bss_algorithm",
+                "on_scores",
+            )
+            for attr in _bss_attrs:
+                val = getattr(self, attr, None)
+                if val is not None:
+                    setattr(bss, attr, val)
+            bss._source = result
+            result._bss_result = bss
+
+        if self.cluster_algorithm is not None:
+            cluster = ClusterResult()
+            _cluster_attrs = (
+                "cluster_labels",
+                "cluster_centers",
+                "cluster_algorithm",
+                "cluster_membership",
+                "cluster_metric_data",
+                "cluster_metric_index",
+                "cluster_metric",
+            )
+            for attr in _cluster_attrs:
+                val = getattr(self, attr, None)
+                if val is not None:
+                    setattr(cluster, attr, val)
+            cluster._source = result
+            result._cluster_result = cluster
+
+        return result
 
     def crop_decomposition_dimension(self, n, compute=False):
         """Crop the score matrix up to the given number.
