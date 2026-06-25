@@ -354,6 +354,24 @@ class ModelManager(object):
 class MVATools(object):
     # TODO: All of the plotting methods here should move to drawing
 
+    @staticmethod
+    def _convert_comp_ids_to_n(comp_ids, output_dimension):
+        """Convert legacy ``comp_ids`` (None/int/list) to a plain ``n`` integer.
+
+        The hyperspy-ml result plot methods expect ``n`` (number of
+        components to show), so this helper bridges the old API.
+        """
+        if comp_ids is None:
+            if output_dimension is None:
+                raise ValueError(
+                    "Please provide the number of components to plot via "
+                    "the `comp_ids` argument."
+                )
+            return output_dimension
+        if hasattr(comp_ids, "__iter__"):
+            return len(comp_ids)
+        return comp_ids
+
     def _plot_factors_or_pchars(
         self,
         components,
@@ -996,6 +1014,35 @@ class MVATools(object):
         plot_decomposition_scores, plot_decomposition_results
 
         """
+        try:
+            from hyperspy_ml import decompose as _  # noqa: F401
+
+            _has_hsml = True
+        except ImportError:
+            _has_hsml = False
+
+        if _has_hsml:
+            warnings.warn(
+                "MVATools.plot_decomposition_components() is deprecated. "
+                "Use results.plot_components() from hyperspy-ml instead.",
+                VisibleDeprecationWarning,
+            )
+            from hyperspy_ml.results import DecompositionResult
+
+            result = DecompositionResult()
+            result.components = self.learning_results.components.T.copy()
+            result.scores = self.learning_results.scores.copy()
+            result.explained_variance = self.learning_results.explained_variance
+            result.explained_variance_ratio = (
+                self.learning_results.explained_variance_ratio
+            )
+            result.mean = self.learning_results.mean
+            n = self._convert_comp_ids_to_n(
+                comp_ids, self.learning_results.output_dimension
+            )
+            return result.plot_components(n=n, **kwargs)
+
+        # --- built-in fallback ---
         if self.axes_manager.signal_dimension > 2:
             raise NotImplementedError(
                 "This method cannot plot components of "
@@ -1088,6 +1135,28 @@ class MVATools(object):
         plot_bss_scores, plot_bss_results
 
         """
+        try:
+            from hyperspy_ml import decompose as _  # noqa: F401
+
+            _has_hsml = True
+        except ImportError:
+            _has_hsml = False
+
+        if _has_hsml:
+            warnings.warn(
+                "MVATools.plot_bss_components() is deprecated. "
+                "Use results.plot_components() from hyperspy-ml instead.",
+                VisibleDeprecationWarning,
+            )
+            from hyperspy_ml.results import BSSResult
+
+            result = BSSResult()
+            result.bss_components = self.learning_results.bss_components.copy()
+            result.bss_scores = self.learning_results.bss_scores.copy()
+            n = self._convert_comp_ids_to_n(comp_ids, result.bss_components.shape[0])
+            return result.plot_components(n=n, **kwargs)
+
+        # --- built-in fallback ---
         if self.axes_manager.signal_dimension > 2:
             raise NotImplementedError(
                 "This method cannot plot components of "
@@ -1188,6 +1257,35 @@ class MVATools(object):
         plot_decomposition_components, plot_decomposition_results
 
         """
+        try:
+            from hyperspy_ml import decompose as _  # noqa: F401
+
+            _has_hsml = True
+        except ImportError:
+            _has_hsml = False
+
+        if _has_hsml:
+            warnings.warn(
+                "MVATools.plot_decomposition_scores() is deprecated. "
+                "Use results.plot_scores() from hyperspy-ml instead.",
+                VisibleDeprecationWarning,
+            )
+            from hyperspy_ml.results import DecompositionResult
+
+            result = DecompositionResult()
+            result.components = self.learning_results.components.T.copy()
+            result.scores = self.learning_results.scores.copy()
+            result.explained_variance = self.learning_results.explained_variance
+            result.explained_variance_ratio = (
+                self.learning_results.explained_variance_ratio
+            )
+            result.mean = self.learning_results.mean
+            n = self._convert_comp_ids_to_n(
+                comp_ids, self.learning_results.output_dimension
+            )
+            return result.plot_scores(n=n, **kwargs)
+
+        # --- built-in fallback ---
         if self.axes_manager.navigation_dimension > 2:
             raise NotImplementedError(
                 "This method cannot plot scores of "
@@ -1304,6 +1402,28 @@ class MVATools(object):
         plot_bss_components, plot_bss_results
 
         """
+        try:
+            from hyperspy_ml import decompose as _  # noqa: F401
+
+            _has_hsml = True
+        except ImportError:
+            _has_hsml = False
+
+        if _has_hsml:
+            warnings.warn(
+                "MVATools.plot_bss_scores() is deprecated. "
+                "Use results.plot_scores() from hyperspy-ml instead.",
+                VisibleDeprecationWarning,
+            )
+            from hyperspy_ml.results import BSSResult
+
+            result = BSSResult()
+            result.bss_components = self.learning_results.bss_components.copy()
+            result.bss_scores = self.learning_results.bss_scores.copy()
+            n = self._convert_comp_ids_to_n(comp_ids, result.bss_scores.shape[1])
+            return result.plot_scores(n=n, **kwargs)
+
+        # --- built-in fallback ---
         if self.axes_manager.navigation_dimension > 2:
             raise NotImplementedError(
                 "This method cannot plot scores of "
@@ -2158,6 +2278,30 @@ class MVATools(object):
         plot_cluster_labels
 
         """
+        try:
+            from hyperspy_ml import decompose as _  # noqa: F401
+
+            _has_hsml = True
+        except ImportError:
+            _has_hsml = False
+
+        if _has_hsml:
+            warnings.warn(
+                "MVATools.plot_cluster_signals() is deprecated. "
+                "Use results.plot_cluster_signals() from hyperspy-ml instead.",
+                VisibleDeprecationWarning,
+            )
+            from hyperspy_ml.results import ClusterResult
+
+            result = ClusterResult()
+            result.cluster_centers = self.learning_results.cluster_centers.T.copy()
+            result.cluster_labels = self.learning_results.cluster_labels.copy()
+            result.cluster_algorithm = getattr(
+                self.learning_results, "cluster_algorithm", None
+            )
+            return result.plot_cluster_signals()
+
+        # --- built-in fallback ---
         if self.axes_manager.signal_dimension > 2:
             raise NotImplementedError(
                 "This method cannot plot factors of signals of dimension higher than 2."
@@ -2245,6 +2389,30 @@ class MVATools(object):
         plot_cluster_signals, plot_cluster_results
 
         """
+        try:
+            from hyperspy_ml import decompose as _  # noqa: F401
+
+            _has_hsml = True
+        except ImportError:
+            _has_hsml = False
+
+        if _has_hsml:
+            warnings.warn(
+                "MVATools.plot_cluster_labels() is deprecated. "
+                "Use results.plot_labels() from hyperspy-ml instead.",
+                VisibleDeprecationWarning,
+            )
+            from hyperspy_ml.results import ClusterResult
+
+            result = ClusterResult()
+            result.cluster_labels = self.learning_results.cluster_labels.copy()
+            result.cluster_centers = self.learning_results.cluster_centers.T.copy()
+            result.cluster_algorithm = getattr(
+                self.learning_results, "cluster_algorithm", None
+            )
+            return result.plot_labels(**kwargs)
+
+        # --- built-in fallback ---
         if self.axes_manager.navigation_dimension > 2:
             raise NotImplementedError(
                 "This method cannot plot labels of "
@@ -2480,6 +2648,26 @@ class BaseSetMetadataItems(t.HasTraits):
         for key, value in self.mapping.items():
             if getattr(self, value) != t.Undefined:
                 self.signal.metadata.set_item(key, getattr(self, value))
+
+
+def _has_meaningful_results(learning_results):
+    """Check whether a LearningResults object contains actual ML results.
+
+    Returns True if decomposition, BSS, or clustering data is present.
+    """
+    # Check decomposition data
+    for attr in ("components", "scores"):
+        if getattr(learning_results, attr, None) is not None:
+            return True
+    # Check BSS data
+    for attr in ("bss_components", "bss_scores", "unmixing_matrix"):
+        if getattr(learning_results, attr, None) is not None:
+            return True
+    # Check cluster data
+    for attr in ("cluster_labels", "cluster_centers"):
+        if getattr(learning_results, attr, None) is not None:
+            return True
+    return False
 
 
 class BaseSignal(FancySlicing, MVA, MVATools):
@@ -2972,6 +3160,17 @@ class BaseSignal(FancySlicing, MVA, MVATools):
                 _lr["bss_scores"] = _lr.pop("bss_loadings")
             if "on_loadings" in _lr:
                 _lr["on_scores"] = _lr.pop("on_loadings")
+            # Warn about legacy ML results in .hspy files
+            _lr = self.learning_results
+            if _has_meaningful_results(_lr):
+                warnings.warn(
+                    "This file contains ML results in legacy format "
+                    "(signal.learning_results). Convert to .hsml: "
+                    "import hyperspy_ml as hsml; "
+                    "hsml.extract_results(signal).save('results.hsml')",
+                    UserWarning,
+                    stacklevel=2,
+                )
         if self._lazy is not oldlazy:
             self._assign_subclass()
 
@@ -3104,6 +3303,8 @@ class BaseSignal(FancySlicing, MVA, MVATools):
                 _lr["bss_loadings"] = _lr["bss_scores"]
             if "on_scores" in _lr and "on_loadings" not in _lr:
                 _lr["on_loadings"] = _lr["on_scores"]
+        else:
+            dic["learning_results"] = {}
         if add_models:
             dic["models"] = self.models._models.as_dictionary()
         return dic
